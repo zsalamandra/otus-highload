@@ -1,0 +1,20 @@
+services:
+  postgres-db:
+    container_name: postgres-social-network
+    image: postgres:14
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: z-social-network
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+  social-network:
+    container_name: z-social-network-service
+    image: zsalamandra/social-network
+    ports:
+      - "8085:8085"
+
+volumes:
+  postgres:

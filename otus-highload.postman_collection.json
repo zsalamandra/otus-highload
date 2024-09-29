@@ -1,0 +1,99 @@
+{
+	"info": {
+		"_postman_id": "60e02375-28fc-4eaa-8324-54ea9baa8d9a",
+		"name": "otus-highload",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "13178327"
+	},
+	"item": [
+		{
+			"name": "register",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"username\": {{user_name}},\r\n    \"firstName\": \"John\",\r\n    \"lastName\": \"Doe\",\r\n    \"birthDate\": \"1990-01-01\",\r\n    \"gender\": \"male\",\r\n    \"interests\": \"programming\",\r\n    \"city\": \"Berlin\",\r\n    \"password\": {{user_pwd}}\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http:\\\\localhost:8085\\user\\register",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8085",
+					"path": [
+						"user",
+						"register"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "get",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJpdmFuIiwiaWF0IjoxNzI3NjA3MjQ4LCJleHAiOjE3Mjc2NDMyNDh9._GTkUdm61kze94d9Bkb7vI9iTKV2WeuSt-xF8KovLl4",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http:\\\\localhost:8085\\user\\get\\1",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8085",
+					"path": [
+						"user",
+						"get",
+						"1"
+					]
+				}
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "jwt_token",
+			"value": "",
+			"type": "string"
+		}
+	]
+}
