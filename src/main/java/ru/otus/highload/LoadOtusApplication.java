@@ -1,4 +1,4 @@
-package ru.otus.load;
+package ru.otus.highload;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;

@@ -1,4 +1,4 @@
-package ru.otus.load.model;
+package ru.otus.highload.model;
 
 import lombok.Data;
 

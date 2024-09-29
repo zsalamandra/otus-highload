@@ -1,18 +1,17 @@
-package ru.otus.load.controller;
+package ru.otus.highload.controller;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
-import ru.otus.load.model.AuthRequest;
-import ru.otus.load.model.AuthResponse;
-import ru.otus.load.service.JwtService;
+import ru.otus.highload.model.AuthRequest;
+import ru.otus.highload.model.AuthResponse;
+import ru.otus.highload.service.JwtService;
 
 @RestController
 @RequiredArgsConstructor

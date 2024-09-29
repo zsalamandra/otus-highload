@@ -1,4 +1,4 @@
-package ru.otus.load.model;
+package ru.otus.highload.model;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;

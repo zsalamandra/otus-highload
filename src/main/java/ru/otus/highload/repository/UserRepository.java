@@ -1,10 +1,10 @@
-package ru.otus.load.repository;
+package ru.otus.highload.repository;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
-import ru.otus.load.mapper.UserRowMapper;
-import ru.otus.load.model.User;
+import ru.otus.highload.mapper.UserRowMapper;
+import ru.otus.highload.model.User;
 
 @Repository
 @RequiredArgsConstructor

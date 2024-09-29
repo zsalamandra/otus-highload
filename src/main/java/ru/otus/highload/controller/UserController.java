@@ -1,12 +1,12 @@
-package ru.otus.load.controller;
+package ru.otus.highload.controller;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
-import ru.otus.load.model.User;
-import ru.otus.load.repository.UserRepository;
+import ru.otus.highload.model.User;
+import ru.otus.highload.repository.UserRepository;
 
 @RestController
 @RequestMapping("/user")

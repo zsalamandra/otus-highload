@@ -1,7 +1,7 @@
-package ru.otus.load.mapper;
+package ru.otus.highload.mapper;
 
 import org.springframework.jdbc.core.RowMapper;
-import ru.otus.load.model.User;
+import ru.otus.highload.model.User;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
