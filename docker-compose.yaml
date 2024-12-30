@@ -1,4 +1,22 @@
 services:
+
+  postgres-master:
+    container_name: postgres_social_network_master
+    image: postgres:14
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: z-social-network
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./master_data:/var/lib/postgresql/data
+      - ./slave_temp:/slave_temp
+      - ./master_init:/docker-entrypoint-initdb.d
+    restart: unless-stopped
+    networks:
+      - social-network
+
   postgres-db:
     container_name: postgres-social-network
     image: postgres:14
@@ -10,11 +28,10 @@ services:
       - "5432:5432"
     restart: unless-stopped
 
+
+
+networks:
   social-network:
-    container_name: z-social-network-service
-    image: zsalamandra/social-network
-    ports:
-      - "8085:8085"
 
 volumes:
   postgres:

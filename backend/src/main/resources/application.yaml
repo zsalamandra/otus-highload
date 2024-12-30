@@ -1,0 +1,21 @@
+server:
+  port: 8085
+
+logging:
+  level:
+    com.zaxxer.hikari: DEBUG
+    org.postgresql: DEBUG
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/z-social-network
+    username: root
+    password: root
+#    hikari:
+#      maximum-pool-size: 10
+#      idle-timeout: 600000
+#      max-lifetime: 18000000
+#      connection-timeout: 30000
+  liquibase:
+    enabled: true
+    change-log: classpath:db/changelog/db.changelog-master.xml
