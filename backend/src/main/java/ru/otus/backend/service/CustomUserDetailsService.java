@@ -14,7 +14,6 @@ import java.util.ArrayList;
 @RequiredArgsConstructor
 public class CustomUserDetailsService implements UserDetailsService {
 
-
     private final UserRepository userRepository;
 
     @Override

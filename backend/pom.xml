@@ -40,6 +40,11 @@
 
     <dependencies>
         <dependency>
+            <groupId>p6spy</groupId>
+            <artifactId>p6spy</artifactId>
+            <version>3.9.1</version>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security</artifactId>
         </dependency>
@@ -86,9 +91,7 @@
             <artifactId>jjwt-jackson</artifactId> <!-- or jjwt-gson if you prefer -->
             <version>0.11.2</version>
         </dependency>
-
-
-        <dependency>
+          <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
