@@ -1,0 +1,164 @@
+services:
+
+  # ETCD КЛАСТЕР
+  etcd1:
+    container_name: z-social-network-etcd1
+    image: zsalamandra/etcd1
+    build:
+      context: etcd1
+    volumes:
+      - ./etcd1/data:/var/lib/etcd
+    ports:
+      - "2379:2379"
+      - "2380:2380"
+    networks:
+      - social-network
+
+  etcd2:
+    container_name: z-social-network-etcd2
+    image: zsalamandra/etcd2
+    build:
+      context: etcd2
+    volumes:
+      - ./etcd2/data:/var/lib/etcd
+    ports:
+      - "2479:2379"
+      - "2480:2380"
+    networks:
+      - social-network
+
+  etcd3:
+    container_name: z-social-network-etcd3
+    image: zsalamandra/etcd3
+    build:
+      context: etcd3
+    volumes:
+      - ./etcd3/data:/var/lib/etcd
+    ports:
+      - "2579:2379"
+      - "2580:2380"
+    networks:
+      - social-network
+
+  postgres1:
+    container_name: z-social-network-postgres1
+    image: zsalamandra/postgres1
+    build:
+      context: postgres/postgres1
+    environment:
+      - POSTGRES_PASSWORD=postgres
+      - PGDATA=/var/lib/postgresql/data/pgdata  # Указываем подкаталог для данных PostgreSQL
+    ports:
+      - "5432:5432"
+      - "8008:8008"
+    volumes:
+      - ./postgres/postgres1/data:/var/lib/postgresql/data/
+    networks:
+      - social-network
+    depends_on:
+      - etcd1
+      - etcd2
+      - etcd3
+
+  postgres2:
+    container_name: z-social-network-postgres2
+    image: zsalamandra/postgres2
+    build:
+      context: postgres/postgres2
+    environment:
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - "5433:5432"
+      - "8009:8008"
+    volumes:
+      - ./postgres/postgres2/data:/var/lib/postgresql/data
+    networks:
+      - social-network
+    depends_on:
+      - etcd1
+      - etcd2
+      - etcd3
+
+  postgres3:
+    container_name: z-social-network-postgres3
+    image: zsalamandra/postgres3
+    build:
+      context: postgres/postgres3
+    environment:
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - "5434:5432"
+      - "8010:8008"
+    volumes:
+      - ./postgres/postgres3/data:/var/lib/postgresql/data
+    networks:
+      - social-network
+    depends_on:
+      - etcd1
+      - etcd2
+      - etcd3
+
+  # HAProxy с Keepalived (Master)
+  haproxy-master:
+    container_name: z-social-network-haproxy-master
+    image: zsalamandra/haproxy-master
+    build:
+      context: haproxy
+      dockerfile: haproxy-master/Dockerfile
+    cap_add:
+      - NET_ADMIN    # Необходимо для Keepalived и виртуального IP
+      - NET_BROADCAST
+    ports:
+      - "5000:5000"  # Порт для мастера
+      - "5001:5001"  # Порт для реплик
+      - "7000:7000"  # Порт для статистики, UI
+    networks:
+      social-network:
+        ipv4_address: 192.168.200.10  # Фиксированный IP для контейнера
+
+  # HAProxy с Keepalived (Backup)
+  haproxy-backup:
+    container_name: z-social-network-haproxy-backup
+    image: zsalamandra/haproxy-backup
+    build:
+      context: haproxy
+      dockerfile: haproxy-backup/Dockerfile
+    cap_add:
+      - NET_ADMIN
+      - NET_BROADCAST
+    ports:
+      - "5002:5000"
+      - "5003:5001"
+      - "7001:7000"
+    networks:
+      social-network:
+        ipv4_address: 192.168.200.11  # Фиксированный IP для контейнера
+
+  z-social-network-hw3:
+    container_name: z-social-network-hw3
+    image: zsalamandra/z-social-network-hw3
+    ports:
+      - "8085:8085"
+    restart: unless-stopped
+    networks:
+      - social-network
+    environment:
+      - JAVA_OPTS="-Xmx1024m -Xms512m"
+
+  replication-test:
+    container_name: z-social-network-test
+    image: zsalamandra/replication-test
+    build:
+      context: tests
+      dockerfile: Dockerfile
+    stdin_open: true
+    tty: true
+    networks:
+      - social-network
+
+networks:
+  social-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.200.0/24  # Фиксированная подсеть для виртуального IP

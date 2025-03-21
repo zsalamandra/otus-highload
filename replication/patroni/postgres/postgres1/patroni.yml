@@ -1,0 +1,79 @@
+scope: z-social-network
+namespace: /db/
+name: postgres1
+
+restapi:
+  listen: 0.0.0.0:8008
+  connect_address: postgres1:8008
+
+etcd3:
+  hosts:
+    - etcd1:2379
+    - etcd2:2379
+    - etcd3:2379
+bootstrap:
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+    initialize: true
+    postgresql:
+      use_pg_rewind: true
+      use_slots: true
+      parameters:
+        wal_level: logical
+        hot_standby: "on"
+        wal_keep_segments: 8
+        max_wal_senders: 10
+        max_replication_slots: 10
+        # Настройка синхронной репликации
+        synchronous_commit: 'on'
+        synchronous_standby_names: 'FIRST 1 (*)'  # Кворум - требуется подтверждение от 1 реплики
+
+  initdb:
+    - encoding: UTF8
+    - data-checksums
+    - locale: C
+
+  # выполняется только на первом мастере, если база ещё не создана.
+#  post_bootstrap:
+#    - psql -U postgres -c "CREATE DATABASE z-social-network;"
+  # выполняется каждый раз, когда нода становится мастером
+#  on_role_change:
+#    - if [[ "$(psql -U postgres -tAc "SELECT 1 FROM pg_database WHERE datname='z-social-network'")" != "1" ]]; then psql -U postgres -c "CREATE DATABASE z-social-network;"; fi
+
+  pg_hba:
+    - host replication replicator 0.0.0.0/0 md5
+    - host all all 0.0.0.0/0 md5
+
+postgresql:
+  listen: 0.0.0.0:5432
+  connect_address: postgres1:5432
+  data_dir: /var/lib/postgresql/data/pgdata  # Подкаталог внутри тома
+  bin_dir: /usr/lib/postgresql/14/bin
+  pgpass: /tmp/pgpass
+  authentication:
+    replication:
+      username: replicator
+      password: replica_password
+    superuser:
+      username: postgres
+      password: postgres
+    rewind:
+      username: rewind_user
+      password: rewind_password
+  parameters:
+    shared_buffers: 128MB
+    dynamic_shared_memory_type: posix
+    max_wal_size: 1GB
+    min_wal_size: 80MB
+    # Синхронная репликация с кворумом
+    synchronous_mode: true
+    synchronous_mode_strict: false
+
+tags:
+  nofailover: false
+  noloadbalance: false
+  clonefrom: true
+  nosync: false

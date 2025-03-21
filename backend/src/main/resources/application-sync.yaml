@@ -10,13 +10,18 @@ logging:
     com.zaxxer.hikari: INFO
 
 spring:
-
   datasource:
     master:
-      jdbc-url: jdbc:postgresql://z-social-network-hw3-postgres-master:5432/z-social-network
-      url: jdbc:postgresql://z-social-network-hw3-postgres-master:5432/z-social-network
-      username: root
-      password: root
+      jdbc-url: jdbc:postgresql://192.168.200.10:5000/z-social-network
+      url: jdbc:postgresql://192.168.200.10:5000/z-social-network
+      username: postgres
+      password: postgres
+      driver-class-name: org.postgresql.Driver
+    slave:
+      jdbc-url: jdbc:postgresql://192.168.200.10:5001/z-social-network
+      url: jdbc:postgresql://192.168.200.10:5001/z-social-network
+      username: postgres
+      password: postgres
       driver-class-name: org.postgresql.Driver
 
 management:
@@ -30,5 +35,3 @@ management:
     metrics:
       export:
         enabled: true
-
-

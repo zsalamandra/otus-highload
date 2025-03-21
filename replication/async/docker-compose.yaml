@@ -1,0 +1,103 @@
+services:
+  z-postgres-master:
+    container_name: z-social-network-hw3-postgres-master
+    image: zsalamandra/master-db
+    build:
+      context: ./master
+      dockerfile: Dockerfile
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: z-social-network
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    volumes:
+      - ./backup:/tmp
+    networks:
+      - social-network
+
+  z-postgres-slave-1:
+    container_name: z-social-network-hw3-postgres-slave-1
+    image: zsalamandra/slave1-db
+    build:
+      context: ./slave-1
+      dockerfile: Dockerfile
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: z-social-network
+    ports:
+      - "15432:5432"
+    volumes:
+      - ./slave-1/postgres-data:/var/lib/postgresql/data
+    depends_on:
+      - z-postgres-master
+    networks:
+      - social-network
+
+  z-postgres-slave-2:
+    container_name: z-social-network-hw3-postgres-slave-2
+    image: zsalamandra/slave2-db
+    build:
+      context: ./slave-2
+      dockerfile: Dockerfile
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: z-social-network
+    ports:
+      - "25432:5432"
+    volumes:
+      - ./slave-2/postgres-data:/var/lib/postgresql/data
+    depends_on:
+      - z-postgres-master
+    networks:
+      - social-network
+
+  z-social-network-hw3:
+    container_name: z-social-network-hw3
+    image: zsalamandra/z-social-network-hw3
+    ports:
+      - "8085:8085"
+    restart: unless-stopped
+    networks:
+      - social-network
+    environment:
+      - JAVA_OPTS="-Xmx1024m -Xms512m"
+
+  replication-test:
+    container_name: z-social-network-test
+    image: zsalamandra/replication-test
+    build:
+      context: ./patroni/tests
+      dockerfile: Dockerfile
+    stdin_open: true
+    tty: true
+    networks:
+      - social-network
+
+  jmeter:
+    container_name: z-social-network-hw3-jmeter
+    build:
+      context: ./testplan
+      dockerfile: Dockerfile
+    image: zsalamandra/jmeter
+    environment:
+      - HOST=z-social-network-hw3
+      - PORT=8085
+    volumes:
+      - ./testplan:/testplan
+      - ./results:/results
+    networks:
+      - social-network
+    depends_on:
+      - z-social-network-hw3
+
+
+networks:
+  social-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.200.0/24  # Фиксированная подсеть для виртуального IP
