@@ -10,14 +10,24 @@ logging:
     com.zaxxer.hikari: INFO
 
 spring:
-
   datasource:
     master:
-      jdbc-url: jdbc:postgresql://z-social-network-hw3-postgres-master:5432/z-social-network
-      url: jdbc:postgresql://z-social-network-hw3-postgres-master:5432/z-social-network
+      jdbc-url: jdbc:postgresql://z-social-network-hw4-postgres-master:5432/z-social-network
+      url: jdbc:postgresql://z-social-network-hw4-postgres-master:5432/z-social-network
       username: root
       password: root
       driver-class-name: org.postgresql.Driver
+  kafka:
+    bootstrap-servers: kafka:9092
+    consumer:
+      group-id: feed-group
+      auto-offset-reset: earliest
+  # Конфигурация Redis
+  data:
+    redis:
+      host: redis
+      port: 6379
+      timeout: 2000
 
 management:
   endpoints:

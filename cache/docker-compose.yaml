@@ -1,0 +1,111 @@
+services:
+  z-postgres-master:
+    container_name: z-social-network-hw4-postgres-master
+    image: postgres:14
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: z-social-network
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    networks:
+      - social-network
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    container_name: z-social-network-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - social-network
+
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    container_name: z-social-network-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    networks:
+      - social-network
+
+  redis:
+    image: redis:alpine
+    container_name: z-social-network-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - social-network
+
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: z-social-network-redis-commander
+    restart: unless-stopped
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+      - HTTP_USER=admin
+      - HTTP_PASSWORD=secret
+    ports:
+      - "8081:8081"
+    networks:
+      - social-network
+    depends_on:
+      - redis
+
+  z-social-network-hw4:
+    container_name: z-social-network-hw4
+    image: zsalamandra/z-social-network-hw4
+    ports:
+      - "8085:8085"
+    restart: unless-stopped
+    networks:
+      - social-network
+    environment:
+      - JAVA_OPTS="-Xmx1024m -Xms512m"
+    depends_on:
+      - z-postgres-master
+      - kafka
+      - redis
+
+  jmeter:
+    container_name: z-social-network-hw4-jmeter
+    build:
+      context: jmeter-test
+      dockerfile: Dockerfile
+    image: zsalamandra/jmeter
+    environment:
+      - HOST=z-social-network-hw4
+      - PORT=8085
+    volumes:
+      - ./jmeter-test:/testplan
+      - ./results:/results
+    networks:
+      - social-network
+    depends_on:
+      - z-social-network-hw4
+
+  cache-test:
+    container_name: z-social-network-hw4-cache-test
+    image: zsalamandra/z-social-network-cache-test-hw4
+    build:
+      context: e2e-test
+      dockerfile: Dockerfile
+    networks:
+      - social-network
+    depends_on:
+      - z-social-network-hw4
+      - redis
+      - kafka
+
+networks:
+  social-network:
+    driver: bridge
