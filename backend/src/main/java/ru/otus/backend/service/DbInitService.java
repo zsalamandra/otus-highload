@@ -20,6 +20,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 
 @Slf4j
@@ -41,6 +43,7 @@ public class DbInitService {
     @Value("${db.name:z-social-network}")
     private String dbName;
 
+
     public DbInitService(DataSource dataSource, JdbcTemplate jdbcTemplate) {
         this.dataSource = dataSource;
         this.jdbcTemplate = jdbcTemplate;
@@ -56,13 +59,17 @@ public class DbInitService {
             createDatabase();
         }
 
-        // Проверяем, существуют ли уже данные в таблице users
-        if (isTableEmpty("users")) {
-            log.info("Users table is empty, initializing with sample data...");
-            loadDataFromSqlScript();
-        } else {
-            log.info("Users table already contains data, skipping initialization.");
-        }
+        createTable("users");
+        loadDataFromSqlScript("sql/insert_users.sql");
+
+        createTable("friendships");
+        loadDataFromSqlScript("sql/insert_friendships.sql");
+
+        createTable("posts");
+        loadPostsFromTextFile("sql/posts.txt");
+
+        createTable("feeds");
+        loadDataFromSqlScript("sql/insert_feeds.sql");
     }
 
     private boolean isDatabaseExists() {
@@ -106,62 +113,27 @@ public class DbInitService {
         }
     }
 
-    private boolean isTableEmpty(String tableName) {
+
+    private void createTable(String tableName) {
+
+        log.info("Creating table: {}", tableName);
         try {
-            // Проверяем, существует ли таблица
-            if (!isTableExists(tableName)) {
-                log.info("Table '{}' does not exist. Creating it...", tableName);
-                createUsersTable();
-                return true;
-            }
-
-            // Проверяем, есть ли записи в таблице
-            Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM " + tableName, Integer.class);
-            return count == null || count == 0;
-        } catch (Exception e) {
-            log.error("Error checking if table is empty: {}", e.getMessage(), e);
-            return true; // В случае ошибки считаем, что таблица пуста
+            String createTableScript = readResourceFile("sql/" + tableName + ".sql");
+            jdbcTemplate.execute(createTableScript);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
     }
 
-    private boolean isTableExists(String tableName) {
-        try (Connection conn = dataSource.getConnection()) {
-            ResultSet tables = conn.getMetaData().getTables(
-                    null, "public", tableName.toLowerCase(), new String[]{"TABLE"});
-            return tables.next();
-        } catch (SQLException e) {
-            log.error("Error checking if table exists: {}", e.getMessage(), e);
-            return false;
-        }
-    }
 
-    private void createUsersTable() {
-        log.info("Creating users table...");
-        jdbcTemplate.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id SERIAL PRIMARY KEY,
-                first_name VARCHAR(100),
-                last_name VARCHAR(100),
-                birth_date DATE,
-                gender VARCHAR(10),
-                interests TEXT,
-                city VARCHAR(100),
-                username VARCHAR(100) UNIQUE,
-                password VARCHAR(255)
-            )
-        """);
-    }
-
-    private void loadDataFromSqlScript() {
+    private void loadDataFromSqlScript(String scriptName) {
         try {
             // Загружаем SQL-скрипт из ресурсов
-            ClassPathResource resource = new ClassPathResource("insert_user.sql");
-            Reader reader = new InputStreamReader(resource.getInputStream(), StandardCharsets.UTF_8);
-            String sql = FileCopyUtils.copyToString(reader);
+            String sql = readResourceFile(scriptName);
 
-            log.info("Executing SQL script to load users...");
+            log.info("Executing SQL script to load data...");
             jdbcTemplate.execute(sql);
-            log.info("Successfully loaded sample users data.");
+            log.info("Successfully loaded sample data.");
         } catch (IOException e) {
             log.error("Failed to load SQL script: {}", e.getMessage(), e);
         } catch (Exception e) {
@@ -169,36 +141,47 @@ public class DbInitService {
         }
     }
 
-    // Старый метод загрузки из CSV файла - можно оставить как альтернативу или удалить
-    public void loadDataFromCsv() {
-        log.info("Loading data from CSV file...");
+    private String readResourceFile(String scriptName) throws IOException {
+        ClassPathResource resource = new ClassPathResource(scriptName);
+        Reader reader = new InputStreamReader(resource.getInputStream(), StandardCharsets.UTF_8);
+        return FileCopyUtils.copyToString(reader);
+    }
 
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement("INSERT INTO users (first_name, last_name, birth_date, city, username, password) VALUES (?, ?, ?, ?, ?, ?)");
-             BufferedReader reader = new BufferedReader(new InputStreamReader(Objects.requireNonNull(getClass().getClassLoader().getResourceAsStream("people.v2.csv"))))) {
+    private void loadPostsFromTextFile(String fileName) {
+        try {
+            // Загружаем файл из ресурсов
+            ClassPathResource resource = new ClassPathResource(fileName);
+            BufferedReader reader = new BufferedReader(new InputStreamReader(resource.getInputStream(), StandardCharsets.UTF_8));
+
+            log.info("Loading posts from file: {}", fileName);
 
             String line;
+            int postCount = 0;
+
+            // Читаем файл построчно
             while ((line = reader.readLine()) != null) {
-                String[] values = line.split(",");
-                if (values.length != 6) {
-                    throw new IllegalArgumentException("Invalid CSV format: " + line);
+                if (!line.trim().isEmpty()) { // Пропускаем пустые строки
+                    // Вставляем пост в таблицу posts
+                    jdbcTemplate.update(
+                            "INSERT INTO posts (user_id, content) VALUES (?, ?)",
+                            getRandomUserId(), // Случайный user_id
+                            line.trim()        // Текст поста
+                    );
+                    postCount++;
                 }
-
-                statement.setString(1, values[0]); // first_name
-                statement.setString(2, values[1]); // last_name
-                statement.setDate(3, java.sql.Date.valueOf(values[2])); // birth_date
-                statement.setString(4, values[3]); // city
-                statement.setString(5, values[4]); // username
-                statement.setString(6, values[5]); // password
-                statement.addBatch();
             }
-            statement.executeBatch();
 
-            log.info("Data successfully loaded from CSV!");
-
-        } catch (Exception e) {
-            throw new RuntimeException("Error loading data from CSV file", e);
+            log.info("Successfully loaded {} posts into the 'posts' table.", postCount);
+        } catch (IOException e) {
+            log.error("Failed to load posts from file: {}", e.getMessage(), e);
         }
+    }
+
+    private Integer getRandomUserId() {
+        return jdbcTemplate.queryForObject(
+                "SELECT id FROM users ORDER BY RANDOM() LIMIT 1",
+                Integer.class
+        );
     }
 
     // Проверка, является ли узел мастером (primary)
