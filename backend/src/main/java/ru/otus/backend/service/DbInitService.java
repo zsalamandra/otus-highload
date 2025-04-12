@@ -70,6 +70,8 @@ public class DbInitService {
 
         createTable("feeds");
         loadDataFromSqlScript("sql/insert_feeds.sql");
+
+        createTable("messages");
     }
 
     private boolean isDatabaseExists() {
