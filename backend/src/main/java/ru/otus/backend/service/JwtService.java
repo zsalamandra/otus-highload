@@ -13,7 +13,10 @@ import java.util.function.Function;
 @Service
 public class JwtService {
 
-    private static final SecretKey SECRET_KEY = Keys.secretKeyFor(SignatureAlgorithm.HS256);  // Генерируем безопасный ключ
+//    private static final SecretKey SECRET_KEY = Keys.secretKeyFor(SignatureAlgorithm.HS256);  // Генерируем безопасный ключ
+    private static final SecretKey SECRET_KEY = Keys.hmacShaKeyFor(
+        "thisMyVerySecretkeyPleaseDon'tShareToENIBADI".getBytes()
+);
 
     public String extractUsername(String token) {
         return extractClaim(token, Claims::getSubject);

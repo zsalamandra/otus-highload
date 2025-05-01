@@ -6,6 +6,8 @@ import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
+import org.springframework.session.web.http.CookieSerializer;
+import org.springframework.session.web.http.DefaultCookieSerializer;
 
 @Configuration
 public class RedisConfig {
@@ -14,19 +16,22 @@ public class RedisConfig {
     public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory connectionFactory) {
         RedisTemplate<String, Object> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
-
-        // Используем StringRedisSerializer для ключей
         template.setKeySerializer(new StringRedisSerializer());
-
-        // Используем Jackson2JsonRedisSerializer для значений
-        template.setValueSerializer(new Jackson2JsonRedisSerializer<>(Object.class));
-
+        template.setValueSerializer(new StringRedisSerializer());
         // Настройки для хеш-операций
         template.setHashKeySerializer(new StringRedisSerializer());
-        template.setHashValueSerializer(new Jackson2JsonRedisSerializer<>(Object.class));
+        template.setHashValueSerializer(new StringRedisSerializer());
 
         template.afterPropertiesSet();
 
         return template;
+    }
+
+    @Bean
+    public CookieSerializer cookieSerializer() {
+        DefaultCookieSerializer serializer = new DefaultCookieSerializer();
+        serializer.setSameSite("None"); // Для поддержки кросс-доменных запросов
+        serializer.setUseSecureCookie(true); // Для HTTPS
+        return serializer;
     }
 }

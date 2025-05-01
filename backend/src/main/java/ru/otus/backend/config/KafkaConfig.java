@@ -14,6 +14,8 @@ import org.springframework.kafka.config.TopicBuilder;
 import org.springframework.kafka.core.*;
 import org.springframework.kafka.support.serializer.JsonDeserializer;
 import org.springframework.kafka.support.serializer.JsonSerializer;
+import ru.otus.backend.model.FeedUpdateTask;
+import ru.otus.backend.model.PostCreatedEvent;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -29,6 +31,22 @@ public class KafkaConfig {
     @Bean
     public NewTopic feedUpdateTopic() {
         return TopicBuilder.name(FEED_UPDATE_TOPIC)
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
+
+    @Bean
+    public NewTopic postEventsTopic() {
+        return TopicBuilder.name(PostCreatedEvent.TOPIC)
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
+
+    @Bean
+    public NewTopic feedMaterializationTopic() {
+        return TopicBuilder.name(FeedUpdateTask.TOPIC)
                 .partitions(3)
                 .replicas(1)
                 .build();

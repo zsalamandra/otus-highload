@@ -23,6 +23,9 @@ public class FeedUpdateListener {
     private final FriendshipRepository friendshipRepository;
     private final ObjectMapper objectMapper;
 
+    // Пороговое значение для определения "знаменитости"
+    private static final int CELEBRITY_THRESHOLD = 1000;
+
     @KafkaListener(topics = KafkaConfig.FEED_UPDATE_TOPIC, groupId = "feed-group")
     public void processFeedUpdate(ConsumerRecord<String, Map<String, Object>> record) {
         try {
@@ -60,9 +63,20 @@ public class FeedUpdateListener {
         // Получаем ID друзей автора поста
         List<Long> friendIds = friendshipRepository.findFriendIdsByUserId(post.getUserId());
 
-        // Добавляем пост в ленты всех друзей
-        for (Long friendId : friendIds) {
-            feedService.addPostToFeed(friendId, post);
+        // Проверяем, является ли автор "знаменитостью"
+        boolean isCelebrity = friendIds.size() > CELEBRITY_THRESHOLD;
+
+        if (isCelebrity) {
+            log.info("Пользователь {} является знаменитостью с {} подписчиками. Не выполняем немедленное обновление лент.",
+                    post.getUserId(), friendIds.size());
+
+            // Для знаменитостей не делаем немедленное обновление лент
+            // Задача материализации будет создана при запросе ленты
+        } else {
+            // Для не-знаменитостей продолжаем как обычно
+            for (Long friendId : friendIds) {
+                feedService.addPostToFeed(friendId, post);
+            }
         }
     }
 

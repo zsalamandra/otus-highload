@@ -53,6 +53,16 @@ public class DbInitService {
     public void initData() {
         log.info("Checking if database initialization is needed...");
 
+        // Читаем переменную окружения - должна ли эта нода инициализировать данные
+        String initializerNode = System.getenv("INITIALIZER_NODE");
+        String instanceId = System.getenv("INSTANCE_ID");
+
+        // Если эта нода не отмечена как инициализатор, пропускаем инициализацию
+        if (initializerNode != null && instanceId != null && !initializerNode.equals(instanceId)) {
+            log.info("This instance ({}) is not the initializer node. Skipping initialization.", instanceId);
+            return;
+        }
+
         // Проверяем, существует ли база данных
         if (!isDatabaseExists()) {
             log.info("Database '{}' does not exist. Creating it...", dbName);

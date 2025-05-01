@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Лента новостей в реальном времени</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        #feed {
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin-top: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .post {
+            border-bottom: 1px solid #eee;
+            padding: 10px 0;
+        }
+        .post .author {
+            font-weight: bold;
+        }
+        .post .content {
+            margin: 5px 0;
+        }
+        .post .timestamp {
+            color: #888;
+            font-size: 0.8em;
+        }
+        .controls {
+            margin-bottom: 20px;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        input[type="text"], input[type="number"] {
+            padding: 8px;
+            margin-right: 10px;
+        }
+        .status {
+            margin-top: 10px;
+            color: #888;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/stomp-websocket@2.3.4-next/lib/stomp.min.js"></script>
+    <script type="text/javascript">
+        let stompClient = null;
+        let userId = 1; // По умолчанию используем пользователя с ID 1
+        let token = null;
+
+        function connect() {
+            let socket = new SockJS('/ws');
+            stompClient = Stomp.over(socket);
+
+            // Добавляем JWT токен в заголовки, если он есть
+            let headers = {};
+            if (token) {
+                headers['Authorization'] = 'Bearer ' + token;
+            }
+
+            stompClient.connect(headers, function (frame) {
+                setConnected(true);
+                console.log('Connected: ' + frame);
+
+                // Подписываемся на канал уведомлений о новых постах
+                stompClient.subscribe('/user/' + userId + '/post/feed/posted', function (message) {
+                    console.log(message);
+                    addPostToFeed(JSON.parse(message.body));
+                });
+            }, function(error) {
+                console.log('Error: ' + error);
+                setConnected(false);
+                setTimeout(connect, 5000); // Пытаемся переподключиться каждые 5 секунд
+            });
+        }
+
+        function disconnect() {
+            if (stompClient !== null) {
+                stompClient.disconnect();
+            }
+            setConnected(false);
+            console.log("Disconnected");
+        }
+
+        function setConnected(connected) {
+            document.getElementById('connect').disabled = connected;
+            document.getElementById('disconnect').disabled = !connected;
+            document.getElementById('connectionStatus').textContent = connected ?
+                'Статус: Подключен' : 'Статус: Отключен';
+        }
+
+        function addPostToFeed(message) {
+            let post = message.payload;
+            let feed = document.getElementById('feed');
+
+            let postElement = document.createElement('div');
+            postElement.className = 'post';
+
+            let authorElement = document.createElement('div');
+            authorElement.className = 'author';
+            authorElement.textContent = 'Пользователь ID: ' + post.userId;
+
+            let contentElement = document.createElement('div');
+            contentElement.className = 'content';
+            contentElement.textContent = post.content;
+
+            let timestampElement = document.createElement('div');
+            timestampElement.className = 'timestamp';
+            let date = new Date(post.timestamp * 1000);
+            timestampElement.textContent = date.toLocaleString();
+
+            postElement.appendChild(authorElement);
+            postElement.appendChild(contentElement);
+            postElement.appendChild(timestampElement);
+
+            feed.insertBefore(postElement, feed.firstChild);
+        }
+
+        function setUserId() {
+            userId = parseInt(document.getElementById('userIdInput').value);
+            disconnect();
+            connect();
+        }
+
+        function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            fetch('/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    username: username,
+                    password: password
+                })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    token = data.jwt;
+                    document.getElementById('loginStatus').textContent = 'Вход выполнен успешно';
+                    // Разрываем существующее соединение и подключаемся с токеном
+                    disconnect();
+                    connect();
+                })
+                .catch(error => {
+                    console.error('Ошибка входа:', error);
+                    document.getElementById('loginStatus').textContent = 'Ошибка входа';
+                });
+        }
+
+        window.onload = function() {
+            // Автоматическое подключение при загрузке страницы
+            connect();
+        };
+    </script>
+</head>
+<body>
+<h1>Лента новостей в реальном времени</h1>
+
+<div class="controls">
+    <h3>Вход в систему:</h3>
+    <input type="text" id="username" placeholder="Имя пользователя"/>
+    <input type="password" id="password" placeholder="Пароль"/>
+    <button id="loginButton" onclick="login()">Войти</button>
+    <div id="loginStatus" class="status"></div>
+</div>
+
+<div class="controls">
+    <h3>Настройки WebSocket:</h3>
+    <button id="connect" onclick="connect()" disabled>Подключиться</button>
+    <button id="disconnect" onclick="disconnect()">Отключиться</button>
+    <div id="connectionStatus" class="status">Статус: Отключен</div>
+</div>
+
+<div class="controls">
+    <h3>ID пользователя для отслеживания ленты:</h3>
+    <input type="number" id="userIdInput" value="1"/>
+    <button onclick="setUserId()">Установить</button>
+</div>
+
+<h2>Лента новостей:</h2>
+<div id="feed"></div>
+</body>
+</html>

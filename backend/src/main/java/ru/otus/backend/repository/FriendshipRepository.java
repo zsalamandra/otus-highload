@@ -16,6 +16,21 @@ public class FriendshipRepository {
         this.jdbcTemplate = jdbcTemplate;
     }
 
+    /**
+     * Подсчитывает количество друзей у пользователя
+     * @param userId ID пользователя
+     * @return количество друзей
+     */
+    @Transactional(readOnly = true)
+    public int countFriendsByUserId(Long userId) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM friendships WHERE user_id = ?",
+                Integer.class,
+                userId
+        );
+        return count != null ? count : 0;
+    }
+
     @Transactional
     public void save(Friendship friendship) {
         jdbcTemplate.update(
