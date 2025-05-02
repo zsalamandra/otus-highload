@@ -28,6 +28,11 @@ public class FeedService {
     private static final int FEED_SIZE_LIMIT = 1000;
     private static final Duration CACHE_TTL = Duration.ofHours(24);
 
+    // Пороговое значение для определения "знаменитости"
+    private static final int CELEBRITY_THRESHOLD = 1000;
+    // Флаг для включения/отключения обработки "знаменитостей"
+    private static final boolean ENABLE_CELEBRITY_OPTIMIZATION = true;
+
     @Transactional(readOnly = true)
     public List<Post> getFeed(Long userId, int limit, int offset) {
         String cacheKey = FEED_CACHE_PREFIX + userId;
@@ -75,6 +80,19 @@ public class FeedService {
         if (friendIds.isEmpty()) {
             log.info("User {} has no friends, skipping feed rebuild", userId);
             return;
+        }
+
+        // Проверяем, есть ли среди друзей "знаменитости"
+        boolean hasCelebrityFriends = false;
+        if (ENABLE_CELEBRITY_OPTIMIZATION) {
+            for (Long friendId : friendIds) {
+                int friendCount = friendshipRepository.countFriendsByUserId(friendId);
+                if (friendCount > CELEBRITY_THRESHOLD) {
+                    hasCelebrityFriends = true;
+                    log.info("Пользователь {} подписан на знаменитость {} с {} подписчиками",
+                            userId, friendId, friendCount);
+                }
+            }
         }
 
         // Получаем посты друзей из БД

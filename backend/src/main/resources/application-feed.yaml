@@ -1,0 +1,65 @@
+server:
+  port: 8085
+
+spring:
+  application:
+    name: social-network-service
+
+  # Конфигурация DataSource
+  datasource:
+    master:
+      jdbc-url: ${SPRING_DATASOURCE_MASTER_URL:jdbc:postgresql://localhost:5432/z-social-network}
+      url: ${SPRING_DATASOURCE_MASTER_URL:jdbc:postgresql://localhost:5432/z-social-network}
+      username: ${SPRING_DATASOURCE_USERNAME:root}
+      password: ${SPRING_DATASOURCE_PASSWORD:root}
+      driver-class-name: org.postgresql.Driver
+
+  # Конфигурация Redis
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      timeout: 2000
+
+  # Конфигурация сессий
+  session:
+    store-type: redis
+    timeout: 1800s
+    redis:
+      namespace: spring:session
+      flush-mode: on-save
+
+  # Конфигурация Kafka
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ${INSTANCE_ID:default}-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+# Мониторинг и метрики
+management:
+  endpoints:
+    web:
+      exposure:
+        include:
+          - health
+          - prometheus
+          - info
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+
+# Логирование
+logging:
+  level:
+    root: INFO
+    ru.otus.backend: DEBUG
+    org.springframework.web.socket: DEBUG

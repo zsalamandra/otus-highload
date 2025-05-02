@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="">
+<head>
+    <title>WebSocket Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/stomp-websocket@2.3.4-next/lib/stomp.min.js"></script>
+    <script type="text/javascript">
+        let stompClient = null;
+        let userId = "1"; // По умолчанию подписываемся на пользователя с ID 1
+
+        function connect() {
+            let socket = new SockJS('/ws');
+            stompClient = Stomp.over(socket);
+            stompClient.connect({}, function (frame) {
+                console.log('Connected: ' + frame);
+
+                // Подписываемся на канал публичных сообщений
+                stompClient.subscribe('/topic/public', function (message) {
+                    showMessage("Public: " + message.body);
+                });
+
+                // Подписываемся на канал уведомлений о новых постах
+                stompClient.subscribe('/user/' + userId + '/post/feed/posted', function (message) {
+                    showMessage("New post: " + message.body);
+                });
+            }, function(error) {
+                console.log('Error: ' + error);
+                setTimeout(connect, 5000); // Пытаемся переподключиться каждые 5 секунд
+            });
+        }
+
+        function disconnect() {
+            if (stompClient !== null) {
+                stompClient.disconnect();
+            }
+            console.log("Disconnected");
+        }
+
+        function sendMessage() {
+            let message = document.getElementById('message').value;
+            stompClient.send("/app/broadcast", {}, message);
+        }
+
+        function showMessage(message) {
+            let messageElement = document.createElement('div');
+            messageElement.textContent = message;
+            document.getElementById('messages').appendChild(messageElement);
+        }
+
+        function setUserId() {
+            userId = document.getElementById('userId').value;
+            if (stompClient) {
+                disconnect();
+                connect();
+            }
+        }
+    </script>
+</head>
+<body onload="connect()">
+<h1>WebSocket Test</h1>
+<div>
+    <label for="userId">User ID:</label>
+    <input type="text" id="userId" value="1"/>
+    <button onclick="setUserId()">Set User ID</button>
+</div>
+<div>
+    <label for="message">Message:</label>
+    <input type="text" id="message" />
+    <button onclick="sendMessage()">Send</button>
+</div>
+<button onclick="disconnect()">Disconnect</button>
+<div id="messages"></div>
+</body>
+</html>

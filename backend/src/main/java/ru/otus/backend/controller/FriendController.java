@@ -17,7 +17,7 @@ public class FriendController {
     private final UserService userService;
 
     @PostMapping("/add")
-    public ResponseEntity<Void> addFriend(@RequestParam Long friendId, Authentication auth) {
+    public ResponseEntity<Void> addFriend(@RequestParam("friendId") Long friendId, Authentication auth) {
         User user = userService.findByUsername(auth.getName());
 
         // Проверяем, что пользователь с friendId существует
