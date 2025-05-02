@@ -1,6 +1,7 @@
 package ru.otus.backend.repository;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -17,6 +18,7 @@ import java.util.Objects;
 
 @Repository
 @RequiredArgsConstructor
+@ConditionalOnProperty(name = "dialog.storage", havingValue = "postgres")
 public class DialogRepositoryImpl implements DialogRepository {
 
     private final JdbcTemplate jdbcTemplate;

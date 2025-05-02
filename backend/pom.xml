@@ -130,6 +130,11 @@
             <artifactId>spring-security-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.tarantool</groupId>
+            <artifactId>connector</artifactId>
+            <version>1.9.4</version>
+        </dependency>
     </dependencies>
 
     <build>

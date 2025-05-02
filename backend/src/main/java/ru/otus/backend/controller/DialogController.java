@@ -1,6 +1,7 @@
 package ru.otus.backend.controller;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -12,6 +13,7 @@ import ru.otus.backend.service.UserService;
 
 import java.util.List;
 
+@Slf4j
 @RestController
 @RequestMapping("/dialog")
 @RequiredArgsConstructor
@@ -28,6 +30,7 @@ public class DialogController {
 
         User currentUser = userService.findByUsername(auth.getName());
 
+        log.info("Sending a message to user {}", userId);
         dialogService.sendMessage(currentUser.getId(), userId, request.getText());
 
         return ResponseEntity.ok().build();

@@ -15,4 +15,6 @@ public interface DialogRepository {
      * Находит все сообщения в диалоге, упорядоченные по времени
      */
     List<DialogMessage> findMessagesByDialogId(String dialogId);
+
+//    List<DialogMessage> findDialogsBetween(Long fromUserId, Long toUserId);
 }
