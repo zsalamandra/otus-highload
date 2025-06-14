@@ -11,7 +11,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import ru.otus.backend.model.AuthRequest;
 import ru.otus.backend.model.AuthResponse;
+import ru.otus.backend.model.User;
 import ru.otus.backend.service.JwtService;
+import ru.otus.backend.service.UserService;
 
 @RestController
 @RequiredArgsConstructor
@@ -21,7 +23,7 @@ public class AuthController {
 
     private final JwtService jwtService;
 
-    private final UserDetailsService userDetailsService;
+    private final UserService userService;
 
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> createAuthenticationToken(@RequestBody AuthRequest authRequest) throws Exception {
@@ -33,8 +35,8 @@ public class AuthController {
             throw new Exception("Incorrect username or password", e);
         }
 
-        final UserDetails userDetails = userDetailsService.loadUserByUsername(authRequest.getUsername());
-        final String jwt = jwtService.generateToken(userDetails.getUsername());
+        User user = userService.findByUsername(authRequest.getUsername());
+        String jwt = jwtService.generateToken(user);
 
         return ResponseEntity.ok(new AuthResponse(jwt));
     }

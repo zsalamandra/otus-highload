@@ -1,4 +1,4 @@
-package ru.otus.backend.config;
+package ru.otus.dialogservice.config;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -6,11 +6,6 @@ import org.springframework.context.annotation.Configuration;
 import org.tarantool.TarantoolClient;
 import org.tarantool.TarantoolClientConfig;
 import org.tarantool.TarantoolClientImpl;
-import org.tarantool.TarantoolClusterClient;
-
-import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.nio.channels.SocketChannel;
 
 @Configuration
 public class TarantoolConfig {

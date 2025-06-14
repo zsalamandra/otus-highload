@@ -13,6 +13,13 @@
     <version>0.0.1-SNAPSHOT</version>
     <description>backend</description>
 
+    <properties>
+        <java.version>17</java.version>
+        <spring.boot.version>3.2.5</spring.boot.version>
+        <spring.cloud.version>2023.0.1</spring.cloud.version>
+        <project.build.finalName>social-backend</project.build.finalName>
+    </properties>
+
     <dependencyManagement>
         <dependencies>
             <dependency>
@@ -25,27 +32,36 @@
             <dependency>
                 <groupId>org.springframework.cloud</groupId>
                 <artifactId>spring-cloud-dependencies</artifactId>
-                <version>Hoxton.RELEASE</version>
+                <version>${spring.cloud.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
         </dependencies>
     </dependencyManagement>
 
-    <properties>
-        <java.version>17</java.version>
-        <project.build.finalName>social-backend</project.build.finalName>
-    </properties>
-
     <dependencies>
+        <dependency>
+            <groupId>io.github.openfeign</groupId>
+            <artifactId>feign-micrometer</artifactId>
+        </dependency>
+
 <!--        <dependency>-->
-<!--            <groupId>p6spy</groupId>-->
-<!--            <artifactId>p6spy</artifactId>-->
-<!--            <version>3.9.1</version>-->
+<!--            <groupId>io.micrometer</groupId>-->
+<!--            <artifactId>micrometer-tracing-bridge-brave</artifactId>-->
 <!--        </dependency>-->
+
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-oauth2-jose</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -113,6 +129,10 @@
             <version>0.11.2</version>
         </dependency>
         <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-openfeign</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
@@ -131,10 +151,14 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>org.tarantool</groupId>
-            <artifactId>connector</artifactId>
-            <version>1.9.4</version>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing-bridge-otel</artifactId>
         </dependency>
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-exporter-otlp</artifactId>
+        </dependency>
+
     </dependencies>
 
     <build>

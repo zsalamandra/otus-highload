@@ -1,0 +1,183 @@
+version: '3.8'
+
+services:
+  tarantool:
+    container_name: z-social-network-hw8-tarantool
+    image: tarantool/tarantool:2.10.4
+    ports:
+      - "3301:3301"
+    volumes:
+      - ./tarantool/init.lua:/opt/tarantool/init.lua
+      - ./tarantool/app:/opt/tarantool/app
+      - tarantool-data:/var/lib/tarantool
+    environment:
+      TARANTOOL_USER_NAME: admin
+      TARANTOOL_USER_PASSWORD: pass
+    command: tarantool /opt/tarantool/init.lua
+    networks:
+      - social-network
+
+  postgres:
+    container_name: z-social-network-hw8-postgres
+    image: postgres:14
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: z-social-network
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - social-network
+
+  # Zookeeper для Kafka
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    container_name: z-social-network-hw8--zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - social-network
+
+  # Kafka для очередей сообщений
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    container_name: z-social-network-hw8-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    networks:
+      - social-network
+
+  # Redis для кеширования и хранения WebSocket сессий
+  redis:
+    image: redis:alpine
+    container_name: z-social-network-hw8-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - social-network
+
+
+  z-social-network-hw8:
+    container_name: z-social-network-hw8-app
+    image: zsalamandra/z-social-network-hw8
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+      args:
+        CONFIG_FILE: application-dialog-service.yaml
+    ports:
+      - "8085:8085"
+    restart: unless-stopped
+    networks:
+      - social-network
+    depends_on:
+      - postgres
+      - redis
+      - kafka
+      - grafana
+      - z-social-network-dialog-hw8
+    environment:
+      - JAVA_OPTS="-Xmx1024m -Xms512m"
+      - SPRING_DATASOURCE_MASTER_URL=jdbc:postgresql://z-social-network-hw8-postgres:5432/z-social-network
+      - INITIALIZER_NODE=app
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - SPRING_DATA_REDIS_HOST=redis
+
+  z-social-network-dialog-hw8:
+    container_name: z-social-network-dialog-hw8-app
+    image: zsalamandra/z-social-network-dialog-hw8
+    build:
+      context: ../dialog-service
+      dockerfile: Dockerfile
+      args:
+        CONFIG_FILE: application.yaml
+    ports:
+      - "8086:8086"
+    restart: unless-stopped
+    networks:
+      - social-network
+    depends_on:
+      - tarantool
+    environment:
+      - JAVA_OPTS="-Xmx1024m -Xms512m"
+      - TARANTOOL_HOST=z-social-network-hw8-tarantool
+      - TARANTOOL_PORT=3301
+      - TARANTOOL_USERNAME=admin
+      - TARANTOOL_PASSWORD=pass
+
+  jmeter:
+    container_name: z-social-network-hw8-jmeter
+    build:
+      context: jmeter-test
+      dockerfile: Dockerfile
+    image: zsalamandra/z-social-network-hw8-jmeter
+    environment:
+      - HOST=z-social-network-hw8-app
+      - PORT=8085
+    volumes:
+      - ./results:/results
+    networks:
+      - social-network
+
+  otel-collector:
+    container_name: z-social-network-otel-collector
+    image: otel/opentelemetry-collector:latest
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4318:4318"
+    depends_on:
+      - tempo
+    networks:
+      - social-network
+
+  tempo:
+    container_name: z-social-network-tempo
+    image: grafana/tempo:latest
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./tempo-config.yaml:/etc/tempo.yaml
+    ports:
+      - "3200:3200"
+    restart: always
+    networks:
+      - social-network
+
+  grafana:
+    container_name: z-social-network-grafana
+    image: grafana/grafana:latest
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - tempo
+      - otel-collector
+    volumes:
+      - grafana-storage:/var/lib/grafana
+    networks:
+      - social-network
+
+networks:
+  social-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  tarantool-data:
+  redis-data:
+  grafana-storage:

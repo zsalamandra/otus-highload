@@ -1,0 +1,78 @@
+server:
+  port: 8085
+
+logging:
+  level:
+    org.springframework.jdbc.core.JdbcTemplate: INFO
+    org.springframework.jdbc.core.StatementCreatorUtils: INFO
+    org.springframework.jdbc.datasource: INFO
+    org.springframework.transaction.interceptor: INFO
+    com.zaxxer.hikari: INFO
+    ru.otus.backend.tarantool: DEBUG
+
+spring:
+  datasource:
+    master:
+      jdbc-url: ${SPRING_DATASOURCE_MASTER_URL:jdbc:postgresql://z-social-network-hw7-postgres:5432/z-social-network}
+      url: ${SPRING_DATASOURCE_MASTER_URL:jdbc:postgresql://z-social-network-hw7-postgres:5432/z-social-network}
+      username: root
+      password: root
+      driver-class-name: org.postgresql.Driver
+
+  application:
+    name: z-social-network-hw8-app
+
+  # Конфигурация Redis
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      timeout: 2000
+
+  # Конфигурация сессий
+  session:
+    store-type: redis
+    timeout: 1800s
+    redis:
+      namespace: spring:session
+      flush-mode: on-save
+
+  # Конфигурация Kafka
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ${INSTANCE_ID:default}-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+  cloud:
+    openfeign:
+      micrometer:
+        enabled: true
+
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: http://otel-collector:4318/v1/traces
+  endpoints:
+    web:
+      exposure:
+        include:
+          - health
+          - prometheus
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+
+dialog:
+  service:
+    url: http://z-social-network-dialog-hw8:8086

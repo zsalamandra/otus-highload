@@ -1,0 +1,30 @@
+server:
+  port: 8086
+
+spring:
+  application:
+    name: dialog-service
+
+  # Конфигурация для Tarantool
+  tarantool:
+    host: ${TARANTOOL_HOST:z-social-network-hw8-tarantool}
+    port: ${TARANTOOL_PORT:3301}
+    username: ${TARANTOOL_USERNAME:admin}
+    password: ${TARANTOOL_PASSWORD:pass}
+    # Настройки таймаутов и пула соединений
+    connection-timeout: 5000
+    socket-timeout: 5000
+    max-connections: 20
+
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: http://otel-collector:4318/v1/traces
+
+logging:
+  level:
+    io.opentelemetry.exporter.otlp: DEBUG
+    io.micrometer.tracing.exporter: DEBUG
