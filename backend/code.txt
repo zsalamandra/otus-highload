@@ -1,0 +1,3975 @@
+
+// file: backend/src/main/java/ru/otus/backend/model/Post.java
+package ru.otus.backend.model;
+
+import lombok.Data;
+
+import java.time.LocalDateTime;
+
+@Data
+public class Post {
+    private Long id;
+    private Long userId;
+    private String content;
+    private LocalDateTime createdAt;
+}
+
+
+// file: backend/src/main/java/ru/otus/backend/model/User.java
+package ru.otus.backend.model;
+
+import lombok.Data;
+
+import java.time.LocalDate;
+
+@Data
+public class User {
+
+    private Long id;
+    private String firstName;
+    private String lastName;
+    private LocalDate birthDate;
+    private String gender;
+    private String interests;
+    private String city;
+    private String username;
+    private String password;
+}
+
+
+// file: backend/src/main/java/ru/otus/backend/model/Friendship.java
+package ru.otus.backend.model;
+
+import lombok.Data;
+
+@Data
+public class Friendship {
+    private Long userId;
+    private Long friendId;
+}
+
+
+// file: backend/src/main/java/ru/otus/backend/model/AuthRequest.java
+package ru.otus.backend.model;
+
+import lombok.Data;
+
+@Data
+public class AuthRequest {
+
+    private String username;
+    private String password;
+}
+
+
+// file: backend/src/main/java/ru/otus/backend/model/AuthResponse.java
+package ru.otus.backend.model;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+
+@Data
+@AllArgsConstructor
+public class AuthResponse {
+
+    private String jwt;
+}
+
+
+// file: backend/src/main/java/ru/otus/backend/model/DialogMessage.java
+package ru.otus.backend.model;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.time.LocalDateTime;
+
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class DialogMessage {
+    private Long id;
+    private Long from;  // ID отправителя
+    private Long to;    // ID получателя
+    private String text;
+    private LocalDateTime createdAt;
+}
+
+
+// file: backend/src/main/java/ru/otus/backend/model/FeedUpdateTask.java
+package ru.otus.backend.model;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.util.List;
+
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class FeedUpdateTask {
+    private Long postId;
+    private Long authorId;
+    private List<Long> targetUserIds; // ID пользователей, которым нужно обновить ленту
+    private TaskType taskType;
+
+    // Тип задачи
+    public enum TaskType {
+        ADD_POST,      // Добавить пост в ленту
+        UPDATE_POST,   // Обновить существующий пост
+        REMOVE_POST    // Удалить пост из ленты
+    }
+
+    // Константа для имени топика Kafka
+    public static final String TOPIC = "feed-materialization";
+}
+
+
+// file: backend/src/main/java/ru/otus/backend/model/PostCreatedEvent.java
+package ru.otus.backend.model;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class PostCreatedEvent {
+    private Long postId;
+    private Long userId;
+    private String content;
+    private Long timestamp;
+
+    // Константа для имени топика Kafka
+    public static final String TOPIC = "post-events";
+}
+
+
+// file: backend/src/main/java/ru/otus/backend/model/WebSocketMessage.java
+package ru.otus.backend.model;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.time.LocalDateTime;
+
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class WebSocketMessage {
+    private String type;    // Тип сообщения, например "NEW_POST"
+    private Object payload; // Содержимое сообщения
+    private LocalDateTime timestamp = LocalDateTime.now();
+}
+
+
+// file: backend/src/main/java/ru/otus/backend/model/DialogMessageRequest.java
+package ru.otus.backend.model;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+
+@Data
+@AllArgsConstructor
+public class DialogMessageRequest {
+    private String text;
+}
+
+
+// file: backend/src/main/java/ru/otus/backend/client/DialogServiceClient.java
+package ru.otus.backend.client;
+
+import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.web.bind.annotation.*;
+import ru.otus.backend.model.DialogMessage;
+import ru.otus.backend.model.DialogMessageRequest;
+
+import java.util.List;
+
+@FeignClient(name = "dialogServiceClient", url = "${dialog.service.url}")
+public interface DialogServiceClient {
+
+    @PostMapping("/dialog/{user_id}/send")
+    void sendMessage(@PathVariable("user_id") Long toUserId,
+                     @RequestBody DialogMessageRequest request);
+
+    @GetMapping("/dialog/{user_id}/list")
+    List<DialogMessage> getDialogMessages(@PathVariable("user_id") Long otherUserId);
+}
+
+
+
+// file: backend/src/main/java/ru/otus/backend/client/FeignAuthInterceptor.java
+package ru.otus.backend.client;
+
+import feign.RequestInterceptor;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
+
+@Configuration
+public class FeignAuthInterceptor {
+
+    @Bean
+    public RequestInterceptor requestInterceptor() {
+        return requestTemplate -> {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+            if (authentication != null && authentication.getPrincipal() instanceof Jwt jwt) {
+                String token = jwt.getTokenValue();
+                requestTemplate.header("Authorization", "Bearer " + token);
+            }
+        };
+    }
+}
+
+
+// file: backend/src/main/java/ru/otus/backend/config/DbConfig.java
+package ru.otus.backend.config;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.jdbc.DataSourceBuilder;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.jdbc.datasource.LazyConnectionDataSourceProxy;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+
+import javax.sql.DataSource;
+import java.util.HashMap;
+import java.util.Map;
+
+@Configuration
+public class DbConfig {
+
+  @Bean(name = "masterDataSource")
+  @ConfigurationProperties(prefix = "spring.datasource.master")
+  public DataSource masterDataSource() {
+    return DataSourceBuilder.create().build();
+  }
+
+  @Bean(name = "slaveDataSource")
+  @ConditionalOnProperty(prefix = "spring.datasource.slave", name = "url")
+  @ConfigurationProperties(prefix = "spring.datasource.slave")
+  public DataSource slaveDataSource() {
+    return DataSourceBuilder.create().build();
+  }
+
+  @Bean(name = "routingDataSource")
+  public DataSource routingDataSource(
+          @Qualifier("masterDataSource") DataSource masterDataSource,
+          @Autowired(required = false) @Qualifier("slaveDataSource") DataSource slaveDataSource) {
+
+    ReplicationRoutingDataSource routingDataSource = new ReplicationRoutingDataSource();
+
+    Map<Object, Object> dataSources = new HashMap<>();
+    dataSources.put("master", masterDataSource);
+    if (slaveDataSource != null) {
+      dataSources.put("slave", slaveDataSource);
+    }
+
+    routingDataSource.setTargetDataSources(dataSources);
+    routingDataSource.setDefaultTargetDataSource(masterDataSource);
+
+    return routingDataSource;
+  }
+
+  @Primary
+  @Bean(name = "mainDataSource")
+  public DataSource dataSource(@Qualifier("routingDataSource") DataSource routingDataSource) {
+    return new LazyConnectionDataSourceProxy(routingDataSource);
+  }
+
+  @Bean
+  public NamedParameterJdbcTemplate namedParameterJdbcTemplate(@Qualifier("mainDataSource") DataSource dataSource) {
+    return new NamedParameterJdbcTemplate(dataSource);
+  }
+}
+
+// file: backend/src/main/java/ru/otus/backend/config/KafkaConfig.java
+// Заменить RabbitMQConfig на KafkaConfig
+package ru.otus.backend.config;
+
+import org.apache.kafka.clients.admin.NewTopic;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.common.serialization.StringDeserializer;
+import org.apache.kafka.common.serialization.StringSerializer;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
+import org.springframework.kafka.config.TopicBuilder;
+import org.springframework.kafka.core.*;
+import org.springframework.kafka.support.serializer.JsonDeserializer;
+import org.springframework.kafka.support.serializer.JsonSerializer;
+import ru.otus.backend.model.FeedUpdateTask;
+import ru.otus.backend.model.PostCreatedEvent;
+
+import java.util.HashMap;
+import java.util.Map;
+
+@Configuration
+public class KafkaConfig {
+
+    public static final String FEED_UPDATE_TOPIC = "feed-updates";
+
+    @Value("${spring.kafka.bootstrap-servers:localhost:9092}")
+    private String bootstrapServers;
+
+    @Bean
+    public NewTopic feedUpdateTopic() {
+        return TopicBuilder.name(FEED_UPDATE_TOPIC)
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
+
+    @Bean
+    public NewTopic postEventsTopic() {
+        return TopicBuilder.name(PostCreatedEvent.TOPIC)
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
+
+    @Bean
+    public NewTopic feedMaterializationTopic() {
+        return TopicBuilder.name(FeedUpdateTask.TOPIC)
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
+
+    @Bean
+    public ProducerFactory<String, Object> producerFactory() {
+        Map<String, Object> configProps = new HashMap<>();
+        configProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+        configProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+        configProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
+        return new DefaultKafkaProducerFactory<>(configProps);
+    }
+
+    @Bean
+    public KafkaTemplate<String, Object> kafkaTemplate() {
+        return new KafkaTemplate<>(producerFactory());
+    }
+
+    @Bean
+    public ConsumerFactory<String, Object> consumerFactory() {
+        Map<String, Object> props = new HashMap<>();
+        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+        props.put(ConsumerConfig.GROUP_ID_CONFIG, "feed-group");
+        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, JsonDeserializer.class);
+        props.put(JsonDeserializer.TRUSTED_PACKAGES, "*");
+        return new DefaultKafkaConsumerFactory<>(props);
+    }
+
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory<String, Object> kafkaListenerContainerFactory() {
+        ConcurrentKafkaListenerContainerFactory<String, Object> factory =
+                new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(consumerFactory());
+        return factory;
+    }
+}
+
+// file: backend/src/main/java/ru/otus/backend/config/RedisConfig.java
+package ru.otus.backend.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
+import org.springframework.data.redis.serializer.StringRedisSerializer;
+import org.springframework.session.web.http.CookieSerializer;
+import org.springframework.session.web.http.DefaultCookieSerializer;
+
+@Configuration
+public class RedisConfig {
+
+    @Bean
+    public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory connectionFactory) {
+        RedisTemplate<String, Object> template = new RedisTemplate<>();
+        template.setConnectionFactory(connectionFactory);
+        template.setKeySerializer(new StringRedisSerializer());
+        template.setValueSerializer(new StringRedisSerializer());
+        // Настройки для хеш-операций
+        template.setHashKeySerializer(new StringRedisSerializer());
+        template.setHashValueSerializer(new StringRedisSerializer());
+
+        template.afterPropertiesSet();
+
+        return template;
+    }
+
+    @Bean
+    public CookieSerializer cookieSerializer() {
+        DefaultCookieSerializer serializer = new DefaultCookieSerializer();
+        serializer.setSameSite("None"); // Для поддержки кросс-доменных запросов
+        serializer.setUseSecureCookie(true); // Для HTTPS
+        return serializer;
+    }
+}
+
+// file: backend/src/main/java/ru/otus/backend/config/SecurityConfig.java
+package ru.otus.backend.config;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+
+import java.io.File;
+
+@Configuration
+@RequiredArgsConstructor
+public class SecurityConfig {
+
+    private final JwtRequestFilter jwtRequestFilter;
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+
+        http
+                .csrf(AbstractHttpConfigurer::disable)
+                .authorizeHttpRequests(authorizeRequests ->
+                        authorizeRequests
+                                .requestMatchers("/user/register", "/login", "/actuator/prometheus","/actuator/**", "/debug/**",
+                                        "/ws/**", "/topic/**", "/app/**", "/user/**")
+                                .permitAll()
+                                .anyRequest().authenticated()
+                )
+                .sessionManagement(managementConfigurer -> managementConfigurer.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .addFilterBefore(jwtRequestFilter, UsernamePasswordAuthenticationFilter.class);
+
+        return http.build();
+    }
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+
+        return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration config)
+            throws Exception {
+        return config.getAuthenticationManager();
+    }
+
+}
+
+
+// file: backend/src/main/java/ru/otus/backend/config/WebSocketConfig.java
+package ru.otus.backend.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.messaging.simp.config.ChannelRegistration;
+import org.springframework.messaging.simp.config.MessageBrokerRegistry;
+import org.springframework.scheduling.concurrent.ConcurrentTaskScheduler;
+import org.springframework.session.data.redis.config.annotation.web.http.EnableRedisHttpSession;
+import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
+import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
+import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
+import ru.otus.backend.service.WebSocketAuthenticationInterceptor;
+
+@Configuration
+@EnableWebSocketMessageBroker
+@EnableRedisHttpSession
+public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
+
+    private final WebSocketAuthenticationInterceptor webSocketAuthenticationInterceptor;
+
+    public WebSocketConfig(WebSocketAuthenticationInterceptor interceptor) {
+        this.webSocketAuthenticationInterceptor = interceptor;
+    }
+
+    @Override
+    public void configureMessageBroker(MessageBrokerRegistry config) {
+        // Префикс для адресов назначения, которые будут обрабатываться брокером сообщений
+        // Настраиваем брокер сообщений для использования Redis
+        // Это позволит масштабировать WebSocket сервер горизонтально
+        config.enableSimpleBroker("/topic", "/user")
+                .setTaskScheduler(new ConcurrentTaskScheduler()) // Для периодического heartbeat
+                .setHeartbeatValue(new long[] {10000, 10000}); // Настройка heartbeat
+
+        // Префикс для адресов назначения, которые будут обрабатываться контроллерами аннотированными с @MessageMapping
+        config.setApplicationDestinationPrefixes("/app");
+
+        // Установка префикса для личных сообщений
+        config.setUserDestinationPrefix("/user");
+    }
+
+    @Override
+    public void configureClientInboundChannel(ChannelRegistration registration) {
+        registration.interceptors(webSocketAuthenticationInterceptor);
+    }
+
+    @Override
+    public void registerStompEndpoints(StompEndpointRegistry registry) {
+        // Регистрация конечной точки для WebSocket с поддержкой SockJS
+        registry.addEndpoint("/ws")
+                .setAllowedOriginPatterns("*")
+                .withSockJS()
+                .setSessionCookieNeeded(true); // Включаем куки для sticky sessions
+    }
+}
+
+
+// file: backend/src/main/java/ru/otus/backend/config/JwtRequestFilter.java
+package ru.otus.backend.config;
+
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+import ru.otus.backend.service.JwtService;
+
+import java.io.IOException;
+
+@Component
+@RequiredArgsConstructor
+public class JwtRequestFilter extends OncePerRequestFilter {
+
+    private final UserDetailsService userDetailsService;
+
+    private final JwtService jwtService;
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+            throws ServletException, IOException {
+
+        final String authorizationHeader = request.getHeader("Authorization");
+
+        String username = null;
+        String jwt = null;
+
+        if (authorizationHeader != null && authorizationHeader.startsWith("Bearer ")) {
+            jwt = authorizationHeader.substring(7);
+            username = jwtService.extractUsername(jwt);
+        }
+
+        if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+            UserDetails userDetails = this.userDetailsService.loadUserByUsername(username);
+            if (jwtService.validateToken(jwt, userDetails.getUsername())) {
+                UsernamePasswordAuthenticationToken authenticationToken = new UsernamePasswordAuthenticationToken(
+                        userDetails, null, userDetails.getAuthorities());
+                authenticationToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                SecurityContextHolder.getContext().setAuthentication(authenticationToken);
+            }
+        }
+        chain.doFilter(request, response);
+    }
+}
+
+
+// file: backend/src/main/java/ru/otus/backend/config/ReplicationRoutingDataSource.java
+package ru.otus.backend.config;
+
+import org.springframework.jdbc.datasource.lookup.AbstractRoutingDataSource;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+
+public class ReplicationRoutingDataSource extends AbstractRoutingDataSource {
+
+    // Этот метод вызывается Spring'ом для определения, какой DataSource использовать
+    @Override
+    protected Object determineCurrentLookupKey() {
+        // Проверяем, является ли текущая транзакция READ-ONLY
+        // Если да - используем slave, если нет - master
+        return TransactionSynchronizationManager.isCurrentTransactionReadOnly()
+                ? "slave"
+                : "master";
+    }
+}
+
+// file: backend/src/main/java/ru/otus/backend/mapper/UserRowMapper.java
+package ru.otus.backend.mapper;
+
+import org.springframework.jdbc.core.RowMapper;
+import ru.otus.backend.model.User;
+
+import java.sql.ResultSet;
+import java.sql.SQLException;
+
+public class UserRowMapper implements RowMapper<User> {
+
+    @Override
+    public User mapRow(ResultSet rs, int rowNum) throws SQLException {
+
+        User user = new User();
+        user.setId(rs.getLong("id"));
+        user.setFirstName(rs.getString("first_name"));
+        user.setLastName(rs.getString("last_name"));
+        user.setBirthDate(rs.getDate("birth_date").toLocalDate());
+        user.setGender(rs.getString("gender"));
+        user.setInterests(rs.getString("interests"));
+        user.setCity(rs.getString("city"));
+        user.setUsername(rs.getString("username"));
+        user.setPassword(rs.getString("password"));
+
+        return user;
+    }
+}
+
+
+// file: backend/src/main/java/ru/otus/backend/service/JwtService.java
+package ru.otus.backend.service;
+
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.SignatureAlgorithm;
+import io.jsonwebtoken.security.Keys;
+import org.springframework.stereotype.Service;
+import ru.otus.backend.model.User;
+
+import javax.crypto.SecretKey;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.function.Function;
+
+@Service
+public class JwtService {
+
+//    private static final SecretKey SECRET_KEY = Keys.secretKeyFor(SignatureAlgorithm.HS256);  // Генерируем безопасный ключ
+    private static final SecretKey SECRET_KEY = Keys.hmacShaKeyFor(
+        "thisMyVerySecretkeyPleaseDon'tShareToENIBADI".getBytes()
+);
+
+    public String extractUsername(String token) {
+        return extractClaim(token, Claims::getSubject);
+    }
+
+    public Date extractExpiration(String token) {
+        return extractClaim(token, Claims::getExpiration);
+    }
+
+    public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
+        final Claims claims = extractAllClaims(token);
+        return claimsResolver.apply(claims);
+    }
+
+    private Claims extractAllClaims(String token) {
+        return Jwts.parserBuilder()
+                .setSigningKey(SECRET_KEY)
+                .build()
+                .parseClaimsJws(token)
+                .getBody();
+    }
+
+    private Boolean isTokenExpired(String token) {
+        return extractExpiration(token).before(new Date());
+    }
+
+    public String generateToken(User user) {
+
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("user_id", user.getId());
+
+        return Jwts.builder()
+                .setClaims(claims)
+                .setSubject(user.getUsername())
+                .setIssuedAt(new Date(System.currentTimeMillis()))
+                .setExpiration(new Date(System.currentTimeMillis() + 1000 * 60 * 60 * 10))  // 10 часов
+                .signWith(SECRET_KEY, SignatureAlgorithm.HS256)  // Передаем SecretKey и алгоритм
+                .compact();
+    }
+
+     public Boolean validateToken(String token, String username) {
+        final String extractedUsername = extractUsername(token);
+        return (extractedUsername.equals(username) && !isTokenExpired(token));
+    }
+}
+
+
+// file: backend/src/main/java/ru/otus/backend/service/FeedService.java
+package ru.otus.backend.service;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ZSetOperations;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import ru.otus.backend.model.Post;
+import ru.otus.backend.repository.FriendshipRepository;
+import ru.otus.backend.repository.PostRepository;
+
+import java.time.Duration;
+import java.util.*;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class FeedService {
+
+    private final RedisTemplate<String, Object> redisTemplate;
+    private final PostRepository postRepository;
+    private final FriendshipRepository friendshipRepository;
+    private final ObjectMapper objectMapper;
+
+    private static final String FEED_CACHE_PREFIX = "feed:";
+    private static final int FEED_SIZE_LIMIT = 1000;
+    private static final Duration CACHE_TTL = Duration.ofHours(24);
+
+    // Пороговое значение для определения "знаменитости"
+    private static final int CELEBRITY_THRESHOLD = 1000;
+    // Флаг для включения/отключения обработки "знаменитостей"
+    private static final boolean ENABLE_CELEBRITY_OPTIMIZATION = true;
+
+    @Transactional(readOnly = true)
+    public List<Post> getFeed(Long userId, int limit, int offset) {
+        String cacheKey = FEED_CACHE_PREFIX + userId;
+
+        // Проверяем есть ли лента в кеше
+        Boolean hasKey = redisTemplate.hasKey(cacheKey);
+
+        if (Boolean.FALSE.equals(hasKey)) {
+            // Если кеша нет, перестраиваем его
+            rebuildFeedCache(userId);
+        }
+
+        // Получаем диапазон постов из отсортированного множества Redis
+        Set<ZSetOperations.TypedTuple<Object>> postsWithScores =
+                redisTemplate.opsForZSet().reverseRangeWithScores(cacheKey, offset, offset + limit - 1);
+
+        if (postsWithScores == null || postsWithScores.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // Получаем ID постов из кеша
+        List<Long> postIds = postsWithScores.stream()
+                .map(tuple -> Long.parseLong(Objects.requireNonNull(tuple.getValue()).toString()))
+                .toList();
+
+        // Получаем полные данные постов из БД в правильном порядке
+        // (т.к. findAllById не гарантирует порядок)
+        List<Post> postList = new ArrayList<>();
+        for (Long postId : postIds) {
+            Post post = postRepository.findById(postId);
+            if (post != null) {
+                postList.add(post);
+            }
+        }
+
+        return postList;
+    }
+
+    public void rebuildFeedCache(Long userId) {
+        log.info("Rebuilding feed cache for user ID: {}", userId);
+
+        // Получаем список ID друзей
+        List<Long> friendIds = friendshipRepository.findFriendIdsByUserId(userId);
+
+        if (friendIds.isEmpty()) {
+            log.info("User {} has no friends, skipping feed rebuild", userId);
+            return;
+        }
+
+        // Проверяем, есть ли среди друзей "знаменитости"
+        boolean hasCelebrityFriends = false;
+        if (ENABLE_CELEBRITY_OPTIMIZATION) {
+            for (Long friendId : friendIds) {
+                int friendCount = friendshipRepository.countFriendsByUserId(friendId);
+                if (friendCount > CELEBRITY_THRESHOLD) {
+                    hasCelebrityFriends = true;
+                    log.info("Пользователь {} подписан на знаменитость {} с {} подписчиками",
+                            userId, friendId, friendCount);
+                }
+            }
+        }
+
+        // Получаем посты друзей из БД
+        List<Post> posts = postRepository.findByUserIdsOrderByCreatedAtDesc(friendIds, FEED_SIZE_LIMIT);
+
+        // Очищаем старый кеш
+        String cacheKey = FEED_CACHE_PREFIX + userId;
+        redisTemplate.delete(cacheKey);
+
+        // Сохраняем посты в Redis Sorted Set с метками времени в качестве score
+        for (Post post : posts) {
+            double score = post.getCreatedAt().toEpochSecond(java.time.ZoneOffset.UTC);
+            redisTemplate.opsForZSet().add(cacheKey, post.getId().toString(), score);
+        }
+
+        // Устанавливаем время жизни кеша
+        redisTemplate.expire(cacheKey, CACHE_TTL);
+
+        log.info("Successfully rebuilt feed cache for user ID: {} with {} posts", userId, posts.size());
+    }
+
+    public void addPostToFeed(Long feedOwnerId, Post post) {
+        String cacheKey = FEED_CACHE_PREFIX + feedOwnerId;
+
+        // Добавляем пост в Sorted Set с использованием времени создания как score
+        double score = post.getCreatedAt().toEpochSecond(java.time.ZoneOffset.UTC);
+        redisTemplate.opsForZSet().add(cacheKey, post.getId().toString(), score);
+
+        // Удаляем старые посты, если их больше FEED_SIZE_LIMIT
+        Long size = redisTemplate.opsForZSet().size(cacheKey);
+        if (size != null && size > FEED_SIZE_LIMIT) {
+            redisTemplate.opsForZSet().removeRange(cacheKey, 0, size - FEED_SIZE_LIMIT - 1);
+        }
+    }
+
+    public void removePostFromFeed(Long feedOwnerId, Long postId) {
+        String cacheKey = FEED_CACHE_PREFIX + feedOwnerId;
+        redisTemplate.opsForZSet().remove(cacheKey, postId.toString());
+    }
+
+    public void invalidateFeed(Long userId) {
+        String cacheKey = FEED_CACHE_PREFIX + userId;
+        redisTemplate.delete(cacheKey);
+    }
+}
+
+// file: backend/src/main/java/ru/otus/backend/service/PostService.java
+package ru.otus.backend.service;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import ru.otus.backend.config.KafkaConfig;
+import ru.otus.backend.model.FeedUpdateTask;
+import ru.otus.backend.model.Post;
+import ru.otus.backend.model.PostCreatedEvent;
+import ru.otus.backend.repository.FriendshipRepository;
+import ru.otus.backend.repository.PostRepository;
+
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class PostService {
+
+    private final PostRepository postRepository;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final FriendshipRepository friendshipRepository;
+
+    // Пороговое значение для определения "знаменитости"
+    private static final int CELEBRITY_THRESHOLD = 1000;
+
+    @Transactional
+    public Post createPost(Post post) {
+        if (post.getCreatedAt() == null) {
+            post.setCreatedAt(LocalDateTime.now());
+        }
+
+        Post savedPost = postRepository.save(post);
+
+        // Отправляем сообщение в очередь для асинхронного обновления лент
+        Map<String, Object> message = new HashMap<>();
+        message.put("action", "CREATE");
+        message.put("post", savedPost);
+
+        kafkaTemplate.send(KafkaConfig.FEED_UPDATE_TOPIC, savedPost.getUserId().toString(), message);
+
+        // Получаем список друзей автора поста
+        List<Long> friendIds = friendshipRepository.findFriendIdsByUserId(savedPost.getUserId());
+
+        // Создаем и отправляем событие о новом посте в отдельный топик для WebSocket уведомлений
+        PostCreatedEvent event = new PostCreatedEvent(
+                savedPost.getId(),
+                savedPost.getUserId(),
+                savedPost.getContent(),
+                savedPost.getCreatedAt().toEpochSecond(ZoneOffset.UTC)
+        );
+        kafkaTemplate.send(PostCreatedEvent.TOPIC, savedPost.getUserId().toString(), event);
+
+        // Проверяем, является ли автор "знаменитостью"
+        boolean isCelebrity = friendIds.size() > CELEBRITY_THRESHOLD;
+
+        // Создаем задачу на материализацию ленты
+        if (isCelebrity) {
+            // Для знаменитостей - не материализуем ленту сразу, а только отправляем уведомления
+            log.info("Пользователь {} является знаменитостью с {} подписчиками. Материализация ленты отложена.",
+                    savedPost.getUserId(), friendIds.size());
+        } else {
+            // Для обычных пользователей - отправляем задачу на материализацию ленты
+            FeedUpdateTask feedTask = new FeedUpdateTask(
+                    savedPost.getId(),
+                    savedPost.getUserId(),
+                    friendIds,
+                    FeedUpdateTask.TaskType.ADD_POST
+            );
+
+            kafkaTemplate.send(FeedUpdateTask.TOPIC, savedPost.getUserId().toString(), feedTask);
+            log.info("Отправлена задача на материализацию ленты для поста {} пользователя {} для {} друзей",
+                    savedPost.getId(), savedPost.getUserId(), friendIds.size());
+        }
+
+        return savedPost;
+    }
+
+    @Transactional
+    public Post updatePost(Post post) {
+        Post existingPost = postRepository.findById(post.getId());
+
+        if (existingPost != null && existingPost.getUserId().equals(post.getUserId())) {
+            existingPost.setContent(post.getContent());
+
+            Post updatedPost = postRepository.save(existingPost);
+
+            Map<String, Object> message = new HashMap<>();
+            message.put("action", "UPDATE");
+            message.put("post", updatedPost);
+
+            kafkaTemplate.send(KafkaConfig.FEED_UPDATE_TOPIC, updatedPost.getUserId().toString(), message);
+
+            return updatedPost;
+        }
+
+        return null; // Пост не найден или не принадлежит пользователю
+    }
+
+    @Transactional
+    public void deletePost(Long postId, Long userId) {
+        Post existingPost = postRepository.findById(postId);
+
+        if (existingPost != null && existingPost.getUserId().equals(userId)) {
+            postRepository.deleteById(postId, userId);
+
+            Map<String, Object> message = new HashMap<>();
+            message.put("action", "DELETE");
+            message.put("postId", postId);
+            message.put("userId", userId);
+
+            kafkaTemplate.send(KafkaConfig.FEED_UPDATE_TOPIC, userId.toString(), message);
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public Post getPost(Long postId) {
+        return postRepository.findById(postId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Post> getUserPosts(Long userId, int limit) {
+        return postRepository.findByUserIdOrderByCreatedAtDesc(userId, limit);
+    }
+}
+
+// file: backend/src/main/java/ru/otus/backend/service/UserService.java
+package ru.otus.backend.service;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.crossstore.ChangeSetPersister;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.stereotype.Service;
+import ru.otus.backend.model.User;
+import ru.otus.backend.repository.UserRepository;
+
+@Service
+@RequiredArgsConstructor
+public class UserService {
+
+    private final UserRepository userRepository;
+
+    public User findByUsername(String username) throws UsernameNotFoundException {
+
+        User user = userRepository.findByUsername(username);
+        if (user == null) {
+            throw new UsernameNotFoundException("User not found with username: " + username);
+        }
+        return user;
+    }
+
+    public User findById(Long id) {
+
+        User user = userRepository.findById(id);
+        if (user == null) {
+            throw new RuntimeException("User not found with id: " + id);
+        }
+        return user;
+    }
+
+}
+
+
+// file: backend/src/main/java/ru/otus/backend/service/DbInitService.java
+package ru.otus.backend.service;
+
+import jakarta.annotation.PostConstruct;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.util.FileCopyUtils;
+
+import javax.sql.DataSource;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
+
+@Slf4j
+@Service
+public class DbInitService {
+
+    private final DataSource dataSource;
+    private final JdbcTemplate jdbcTemplate;
+
+    @Value("${spring.datasource.master.url}")
+    private String masterDbUrl;
+
+    @Value("${spring.datasource.master.username}")
+    private String dbUsername;
+
+    @Value("${spring.datasource.master.password}")
+    private String dbPassword;
+
+    @Value("${db.name:z-social-network}")
+    private String dbName;
+
+
+    public DbInitService(DataSource dataSource, JdbcTemplate jdbcTemplate) {
+        this.dataSource = dataSource;
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    @PostConstruct
+    public void initData() {
+        log.info("Checking if database initialization is needed...");
+
+        // Читаем переменную окружения - должна ли эта нода инициализировать данные
+        String initializerNode = System.getenv("INITIALIZER_NODE");
+        String instanceId = System.getenv("INSTANCE_ID");
+
+        // Если эта нода не отмечена как инициализатор, пропускаем инициализацию
+        if (initializerNode != null && instanceId != null && !initializerNode.equals(instanceId)) {
+            log.info("This instance ({}) is not the initializer node. Skipping initialization.", instanceId);
+            return;
+        }
+
+        // Проверяем, существует ли база данных
+        if (!isDatabaseExists()) {
+            log.info("Database '{}' does not exist. Creating it...", dbName);
+            createDatabase();
+        }
+
+        createTable("users");
+        loadDataFromSqlScript("sql/insert_users.sql");
+
+        createTable("friendships");
+        loadDataFromSqlScript("sql/insert_friendships.sql");
+
+        createTable("posts");
+        loadPostsFromTextFile("sql/posts.txt");
+
+        createTable("feeds");
+        loadDataFromSqlScript("sql/insert_feeds.sql");
+
+        createTable("messages");
+    }
+
+    private boolean isDatabaseExists() {
+        // Получаем URL для подключения к PostgreSQL (без указания БД)
+        String baseUrl = masterDbUrl.substring(0, masterDbUrl.lastIndexOf('/'));
+        String postgresUrl = baseUrl + "/postgres"; // Подключаемся к системной БД postgres
+
+        try (Connection conn = DriverManager.getConnection(postgresUrl, dbUsername, dbPassword);
+             Statement stmt = conn.createStatement()) {
+
+            // Проверяем, существует ли наша БД
+            ResultSet rs = stmt.executeQuery(
+                    "SELECT 1 FROM pg_database WHERE datname = '" + dbName + "'");
+            return rs.next();
+        } catch (SQLException e) {
+            log.error("Error checking if database exists: {}", e.getMessage(), e);
+            return false;
+        }
+    }
+
+    private void createDatabase() {
+        // Получаем URL для подключения к PostgreSQL (без указания БД)
+        String baseUrl = masterDbUrl.substring(0, masterDbUrl.lastIndexOf('/'));
+        String postgresUrl = baseUrl + "/postgres"; // Подключаемся к системной БД postgres
+
+        try (Connection conn = DriverManager.getConnection(postgresUrl, dbUsername, dbPassword);
+             Statement stmt = conn.createStatement()) {
+
+            // Создаем новую базу данных
+            String sql = "CREATE DATABASE \"" + dbName + "\"";
+            stmt.executeUpdate(sql);
+            log.info("Database '{}' successfully created", dbName);
+
+            // Ждем немного, чтобы БД стала доступна
+            Thread.sleep(2000);
+        } catch (SQLException e) {
+            log.error("Error creating database: {}", e.getMessage(), e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("Thread interrupted while waiting for database creation");
+        }
+    }
+
+
+    private void createTable(String tableName) {
+
+        log.info("Creating table: {}", tableName);
+        try {
+            String createTableScript = readResourceFile("sql/" + tableName + ".sql");
+            jdbcTemplate.execute(createTableScript);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+
+    private void loadDataFromSqlScript(String scriptName) {
+        try {
+            // Загружаем SQL-скрипт из ресурсов
+            String sql = readResourceFile(scriptName);
+
+            log.info("Executing SQL script to load data...");
+            jdbcTemplate.execute(sql);
+            log.info("Successfully loaded sample data.");
+        } catch (IOException e) {
+            log.error("Failed to load SQL script: {}", e.getMessage(), e);
+        } catch (Exception e) {
+            log.error("Error executing SQL script: {}", e.getMessage(), e);
+        }
+    }
+
+    private String readResourceFile(String scriptName) throws IOException {
+        ClassPathResource resource = new ClassPathResource(scriptName);
+        Reader reader = new InputStreamReader(resource.getInputStream(), StandardCharsets.UTF_8);
+        return FileCopyUtils.copyToString(reader);
+    }
+
+    private void loadPostsFromTextFile(String fileName) {
+        try {
+            // Загружаем файл из ресурсов
+            ClassPathResource resource = new ClassPathResource(fileName);
+            BufferedReader reader = new BufferedReader(new InputStreamReader(resource.getInputStream(), StandardCharsets.UTF_8));
+
+            log.info("Loading posts from file: {}", fileName);
+
+            String line;
+            int postCount = 0;
+
+            // Читаем файл построчно
+            while ((line = reader.readLine()) != null) {
+                if (!line.trim().isEmpty()) { // Пропускаем пустые строки
+                    // Вставляем пост в таблицу posts
+                    jdbcTemplate.update(
+                            "INSERT INTO posts (user_id, content) VALUES (?, ?)",
+                            getRandomUserId(), // Случайный user_id
+                            line.trim()        // Текст поста
+                    );
+                    postCount++;
+                }
+            }
+
+            log.info("Successfully loaded {} posts into the 'posts' table.", postCount);
+        } catch (IOException e) {
+            log.error("Failed to load posts from file: {}", e.getMessage(), e);
+        }
+    }
+
+    private Integer getRandomUserId() {
+        return jdbcTemplate.queryForObject(
+                "SELECT id FROM users ORDER BY RANDOM() LIMIT 1",
+                Integer.class
+        );
+    }
+
+    // Проверка, является ли узел мастером (primary)
+    private boolean isPrimaryNode() {
+        try {
+            // Проверка, является ли узел мастером в Patroni кластере
+            return Boolean.TRUE.equals(jdbcTemplate.queryForObject("SELECT NOT pg_is_in_recovery()", Boolean.class));
+        } catch (Exception e) {
+            log.error("Error checking if node is primary: {}", e.getMessage(), e);
+            return false;
+        }
+    }
+}
+
+// file: backend/src/main/java/ru/otus/backend/service/WebSocketHandler.java
+package ru.otus.backend.service;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.socket.CloseStatus;
+import org.springframework.web.socket.TextMessage;
+import org.springframework.web.socket.WebSocketSession;
+import org.springframework.web.socket.handler.TextWebSocketHandler;
+
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+@Slf4j
+public class WebSocketHandler extends TextWebSocketHandler {
+
+    // Хранение активных соединений
+    private final Map<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
+
+    @Override
+    public void afterConnectionEstablished(WebSocketSession session) throws Exception {
+        String sessionId = session.getId();
+        sessions.put(sessionId, session);
+        log.info("WebSocket соединение установлено: {}", sessionId);
+    }
+
+    @Override
+    public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
+        String sessionId = session.getId();
+        sessions.remove(sessionId);
+        log.info("WebSocket соединение закрыто: {} со статусом {}", sessionId, status);
+    }
+
+    @Override
+    protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
+        log.info("Получено сообщение от {}: {}", session.getId(), message.getPayload());
+        // В будущем здесь можно добавить обработку входящих сообщений
+    }
+}
+
+
+// file: backend/src/main/java/ru/otus/backend/service/FriendshipService.java
+package ru.otus.backend.service;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import ru.otus.backend.config.KafkaConfig;
+import ru.otus.backend.model.Friendship;
+import ru.otus.backend.repository.FriendshipRepository;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+@Service
+@RequiredArgsConstructor
+public class FriendshipService {
+
+    private final FriendshipRepository friendshipRepository;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
+
+    @Transactional
+    public void addFriend(Long userId, Long friendId) {
+        if (userId.equals(friendId)) {
+            throw new IllegalArgumentException("Cannot add yourself as a friend");
+        }
+
+        Friendship friendship = new Friendship();
+        friendship.setUserId(userId);
+        friendship.setFriendId(friendId);
+
+        Map<String, Object> message = new HashMap<>();
+        message.put("action", "ADD_FRIEND");
+        message.put("userId", userId);
+        message.put("friendId", friendId);
+
+        kafkaTemplate.send(KafkaConfig.FEED_UPDATE_TOPIC, userId.toString(), message);
+
+        friendshipRepository.save(friendship);
+    }
+
+    @Transactional
+    public void deleteFriend(Long userId, Long friendId) {
+
+        friendshipRepository.delete(userId, friendId);
+
+        // Отправляем событие об удалении друга для обновления ленты
+        Map<String, Object> message = new HashMap<>();
+        message.put("action", "DELETE_FRIEND");
+        message.put("userId", userId);
+        message.put("friendId", friendId);
+
+        kafkaTemplate.send(KafkaConfig.FEED_UPDATE_TOPIC, userId.toString(), message);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Long> getFriendIds(Long userId) {
+        return friendshipRepository.findFriendIdsByUserId(userId);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isFriend(Long userId, Long friendId) {
+        return friendshipRepository.existsFriendship(userId, friendId);
+    }
+}
+
+// file: backend/src/main/java/ru/otus/backend/service/DelegatingDialogService.java
+package ru.otus.backend.service;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import ru.otus.backend.client.DialogFeignClient;
+import ru.otus.backend.model.DialogMessage;
+import ru.otus.backend.model.DialogMessageRequest;
+
+import java.util.List;
+
+@Service
+@RequiredArgsConstructor
+public class DelegatingDialogService {
+
+    private final DialogServiceClient client;
+
+    public Long sendMessage(Long toUserId, String text) {
+        client.sendMessage(toUserId, new DialogMessageRequest(text));
+        return null; // ID не нужен
+    }
+
+    public List<DialogMessage> getDialogMessages(Long currentUserId, Long otherUserId) {
+        return client.getDialogMessages(otherUserId);
+    }
+}
+
+
+// file: backend/src/main/java/ru/otus/backend/service/CustomUserDetailsService.java
+package ru.otus.backend.service;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.stereotype.Service;
+import ru.otus.backend.model.User;
+import ru.otus.backend.repository.UserRepository;
+
+import java.util.ArrayList;
+
+@Service
+@RequiredArgsConstructor
+public class CustomUserDetailsService implements UserDetailsService {
+
+    private final UserRepository userRepository;
+
+    @Override
+    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+
+        User user = userRepository.findByUsername(username);
+        if (user == null) {
+            throw new UsernameNotFoundException("User not found with username: " + username);
+        }
+        return new org.springframework.security.core.userdetails.User(
+                user.getUsername(),
+                user.getPassword(),
+                new ArrayList<>()
+        );
+    }
+
+}
+
+
+// file: backend/src/main/java/ru/otus/backend/service/WebSocketAuthenticationInterceptor.java
+package ru.otus.backend.service;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.simp.stomp.StompCommand;
+import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
+import org.springframework.messaging.support.ChannelInterceptor;
+import org.springframework.messaging.support.MessageHeaderAccessor;
+import org.springframework.stereotype.Component;
+import ru.otus.backend.model.User;
+import ru.otus.backend.repository.UserRepository;
+
+@Slf4j
+@Component
+public class WebSocketAuthenticationInterceptor implements ChannelInterceptor {
+
+    private final JwtService jwtService;
+    private final UserRepository userRepository;
+
+    public WebSocketAuthenticationInterceptor(JwtService jwtService, UserRepository userRepository) {
+        this.jwtService = jwtService;
+        this.userRepository = userRepository;
+    }
+
+    @Override
+    public Message<?> preSend(Message<?> message, MessageChannel channel) {
+        StompHeaderAccessor accessor = MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor.class);
+
+        if (accessor != null && StompCommand.CONNECT.equals(accessor.getCommand())) {
+            String authorization = accessor.getFirstNativeHeader("Authorization");
+
+            if (authorization != null && authorization.startsWith("Bearer ")) {
+                String token = authorization.substring(7);
+                String username = jwtService.extractUsername(token);
+
+                if (username != null) {
+                    User user = userRepository.findByUsername(username);
+                    // Устанавливаем userId в атрибуты сессии
+                    log.debug("принудительно добавляем userId: {}", user.getId());
+                    accessor.getSessionAttributes().put("userId", user.getId().toString());
+                }
+            }
+        }
+        return message;
+    }
+}
+
+
+// file: backend/src/main/java/ru/otus/backend/messages/PostEventListener.java
+package ru.otus.backend.messages;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.stereotype.Component;
+import ru.otus.backend.model.PostCreatedEvent;
+import ru.otus.backend.repository.FriendshipRepository;
+import ru.otus.backend.model.WebSocketMessage;
+
+import java.util.List;
+
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class PostEventListener {
+
+    private final SimpMessagingTemplate messagingTemplate;
+    private final FriendshipRepository friendshipRepository;
+    private final WebSocketEventListener webSocketEventListener;
+
+    @KafkaListener(topics = PostCreatedEvent.TOPIC, groupId = "post-events-group")
+    public void processPostEvent(ConsumerRecord<String, PostCreatedEvent> record) {
+        try {
+            PostCreatedEvent event = record.value();
+            log.info("Получено событие о новом посте: {}", event);
+
+            // Создаем экземпляр сообщения для WebSocket
+            WebSocketMessage wsMessage = new WebSocketMessage(
+                    "NEW_POST",
+                    event,
+                    null // timestamp будет установлен автоматически
+            );
+
+            // Получаем список друзей автора поста (их ID)
+            List<Long> friendIds = friendshipRepository.findFriendIdsByUserId(event.getUserId());
+
+            log.debug("Друзья пользователя {} -> {}", event.getUserId(), friendIds);
+
+            // Отправляем уведомление только активным друзьям
+            int activeUsersNotified = 0;
+            for (Long friendId : friendIds) {
+                // Проверяем, подключен ли пользователь сейчас
+                if (webSocketEventListener.isUserConnected(friendId.toString())) {
+                    messagingTemplate.convertAndSendToUser(
+                            friendId.toString(),
+                            "/post/feed/posted",
+                            wsMessage
+                    );
+                    activeUsersNotified++;
+                }
+            }
+
+            log.info("Отправлено {} уведомлений о новом посте из {} друзей пользователя {}",
+                    activeUsersNotified, friendIds.size(), event.getUserId());
+
+        } catch (Exception e) {
+            log.error("Ошибка обработки события о новом посте", e);
+        }
+    }
+}
+
+
+// file: backend/src/main/java/ru/otus/backend/messages/FeedUpdateListener.java
+package ru.otus.backend.messages;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.stereotype.Component;
+import ru.otus.backend.config.KafkaConfig;
+import ru.otus.backend.model.Post;
+import ru.otus.backend.repository.FriendshipRepository;
+import ru.otus.backend.service.FeedService;
+
+import java.util.List;
+import java.util.Map;
+
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class FeedUpdateListener {
+
+    private final FeedService feedService;
+    private final FriendshipRepository friendshipRepository;
+    private final ObjectMapper objectMapper;
+
+    // Пороговое значение для определения "знаменитости"
+    private static final int CELEBRITY_THRESHOLD = 1000;
+
+    @KafkaListener(topics = KafkaConfig.FEED_UPDATE_TOPIC, groupId = "feed-group")
+    public void processFeedUpdate(ConsumerRecord<String, Map<String, Object>> record) {
+        try {
+            Map<String, Object> message = record.value();
+            String action = (String) message.get("action");
+            log.info("Processing feed update message with action: {}", action);
+
+            switch (action) {
+                case "CREATE":
+                    handlePostCreate(message);
+                    break;
+                case "UPDATE":
+                    handlePostUpdate(message);
+                    break;
+                case "DELETE":
+                    handlePostDelete(message);
+                    break;
+                case "ADD_FRIEND":
+                    handleAddFriend(message);
+                    break;
+                case "DELETE_FRIEND":
+                    handleDeleteFriend(message);
+                    break;
+                default:
+                    log.warn("Unknown action: {}", action);
+            }
+        } catch (Exception e) {
+            log.error("Error processing feed update message", e);
+        }
+    }
+
+    private void handlePostCreate(Map<String, Object> message) {
+        Post post = objectMapper.convertValue(message.get("post"), Post.class);
+
+        // Получаем ID друзей автора поста
+        List<Long> friendIds = friendshipRepository.findFriendIdsByUserId(post.getUserId());
+
+        // Проверяем, является ли автор "знаменитостью"
+        boolean isCelebrity = friendIds.size() > CELEBRITY_THRESHOLD;
+
+        if (isCelebrity) {
+            log.info("Пользователь {} является знаменитостью с {} подписчиками. Не выполняем немедленное обновление лент.",
+                    post.getUserId(), friendIds.size());
+
+            // Для знаменитостей не делаем немедленное обновление лент
+            // Задача материализации будет создана при запросе ленты
+        } else {
+            // Для не-знаменитостей продолжаем как обычно
+            for (Long friendId : friendIds) {
+                feedService.addPostToFeed(friendId, post);
+            }
+        }
+    }
+
+    private void handlePostUpdate(Map<String, Object> message) {
+        Post post = objectMapper.convertValue(message.get("post"), Post.class);
+
+        // инвалидируем кеши лент всех друзей
+        List<Long> friendIds = friendshipRepository.findFriendIdsByUserId(post.getUserId());
+
+        for (Long friendId : friendIds) {
+            feedService.invalidateFeed(friendId);
+        }
+    }
+
+    private void handlePostDelete(Map<String, Object> message) {
+        Long postId = Long.valueOf(message.get("postId").toString());
+        Long userId = Long.valueOf(message.get("userId").toString());
+
+        // Получаем ID друзей автора поста
+        List<Long> friendIds = friendshipRepository.findFriendIdsByUserId(userId);
+
+        // Удаляем пост из лент всех друзей
+        for (Long friendId : friendIds) {
+            feedService.removePostFromFeed(friendId, postId);
+        }
+    }
+
+    private void handleAddFriend(Map<String, Object> message) {
+        Long userId = Long.valueOf(message.get("userId").toString());
+
+        // Перестраиваем ленту, т.к. добавился новый друг
+        feedService.rebuildFeedCache(userId);
+    }
+
+    private void handleDeleteFriend(Map<String, Object> message) {
+        Long userId = Long.valueOf(message.get("userId").toString());
+
+        // Перестраиваем ленту, т.к. удалился друг
+        feedService.rebuildFeedCache(userId);
+    }
+}
+
+// file: backend/src/main/java/ru/otus/backend/messages/WebSocketEventListener.java
+package ru.otus.backend.messages;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.event.EventListener;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
+import org.springframework.stereotype.Component;
+import org.springframework.web.socket.messaging.SessionConnectedEvent;
+import org.springframework.web.socket.messaging.SessionDisconnectEvent;
+import ru.otus.backend.model.User;
+import ru.otus.backend.repository.UserRepository;
+
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
+
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class WebSocketEventListener {
+
+    private final RedisTemplate<String, Object> webSocketRedisTemplate;
+    private final UserRepository userRepository;
+
+    private static final String WS_SESSIONS_KEY = "ws:sessions";
+
+    @EventListener
+    public void handleWebSocketConnectListener(SessionConnectedEvent event) {
+
+        log.debug("handleWebSocketConnectListener: {}", event);
+
+        StompHeaderAccessor headerAccessor = StompHeaderAccessor.wrap(event.getMessage());
+        String sessionId = Objects.requireNonNullElse(headerAccessor.getSessionId(), "mainSessionId");
+
+        String userId = "anonymous";
+
+        if (headerAccessor.getUser() != null) {
+            // Извлекаем имя пользователя из аутентификации
+            String username = headerAccessor.getUser().getName();
+            log.debug("Found authenticated user: {}", username);
+
+            // Находим пользователя по имени и получаем его ID
+            try {
+                User user = userRepository.findByUsername(username);
+                if (user != null) {
+                    userId = user.getId().toString();
+                    log.debug("Found user ID from database: {}", userId);
+                }
+            } catch (Exception e) {
+                log.error("Error finding user by username: {}", e.getMessage());
+            }
+        }
+
+        log.info("Received a new web socket connection, session: {}, user: {}", sessionId, userId);
+
+        // Сохраняем в Redis для глобального доступа
+        webSocketRedisTemplate.opsForHash().put(WS_SESSIONS_KEY, sessionId, userId);
+    }
+
+    @EventListener
+    public void handleWebSocketDisconnectListener(SessionDisconnectEvent event) {
+        StompHeaderAccessor headerAccessor = StompHeaderAccessor.wrap(event.getMessage());
+        String sessionId = headerAccessor.getSessionId();
+
+        webSocketRedisTemplate.opsForHash().delete(WS_SESSIONS_KEY, sessionId);
+    }
+
+    /**
+     * Проверяет, подключен ли пользователь в настоящий момент через WebSocket
+     */
+    public boolean isUserConnected(String userId) {
+        // Проверяем в Redis
+        Map<Object, Object> allSessions = webSocketRedisTemplate.opsForHash().entries(WS_SESSIONS_KEY);
+
+        log.debug("Search connected user on Redis. Sessions = {}", allSessions);
+
+        return allSessions.containsValue(userId);
+    }
+}
+
+
+// file: backend/src/main/java/ru/otus/backend/messages/FeedMaterializationListener.java
+package ru.otus.backend.messages;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.stereotype.Component;
+import ru.otus.backend.model.FeedUpdateTask;
+import ru.otus.backend.model.Post;
+import ru.otus.backend.service.FeedService;
+import ru.otus.backend.service.PostService;
+
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class FeedMaterializationListener {
+
+    private final FeedService feedService;
+    private final PostService postService;
+
+    // Создаем пул потоков для параллельной обработки задач
+    private final ExecutorService executorService = Executors.newFixedThreadPool(5);
+
+    @KafkaListener(topics = FeedUpdateTask.TOPIC, groupId = "feed-materialization-group")
+    public void processFeedMaterializationTask(ConsumerRecord<String, FeedUpdateTask> record) {
+        try {
+            FeedUpdateTask task = record.value();
+            log.info("Получена задача материализации ленты: {}", task);
+
+            if (task.getTargetUserIds() == null || task.getTargetUserIds().isEmpty()) {
+                log.warn("Задача не содержит целевых пользователей, пропускаем");
+                return;
+            }
+
+            switch (task.getTaskType()) {
+                case ADD_POST:
+                    processFeedAddition(task);
+                    break;
+                case UPDATE_POST:
+                    processFeedUpdate(task);
+                    break;
+                case REMOVE_POST:
+                    processFeedRemoval(task);
+                    break;
+                default:
+                    log.warn("Неизвестный тип задачи: {}", task.getTaskType());
+            }
+        } catch (Exception e) {
+            log.error("Ошибка обработки задачи материализации ленты", e);
+        }
+    }
+
+    private void processFeedAddition(FeedUpdateTask task) {
+        // Получаем пост из базы данных
+        Post post = postService.getPost(task.getPostId());
+        if (post == null) {
+            log.error("Не удалось найти пост с ID {} для материализации ленты", task.getPostId());
+            return;
+        }
+
+        // Обрабатываем каждого пользователя в отдельном потоке
+        task.getTargetUserIds().forEach(userId ->
+                executorService.submit(() -> {
+                    try {
+                        // Добавляем пост в ленту пользователя
+                        feedService.addPostToFeed(userId, post);
+                        log.debug("Пост {} успешно добавлен в ленту пользователя {}", post.getId(), userId);
+                    } catch (Exception e) {
+                        log.error("Ошибка при добавлении поста {} в ленту пользователя {}", post.getId(), userId, e);
+                    }
+                })
+        );
+    }
+
+    private void processFeedUpdate(FeedUpdateTask task) {
+        // Инвалидируем кеш для всех целевых пользователей
+        task.getTargetUserIds().forEach(userId ->
+                executorService.submit(() -> {
+                    try {
+                        // Инвалидируем кеш ленты пользователя
+                        feedService.invalidateFeed(userId);
+                        log.debug("Кеш ленты пользователя {} успешно инвалидирован", userId);
+                    } catch (Exception e) {
+                        log.error("Ошибка при инвалидации кеша ленты пользователя {}", userId, e);
+                    }
+                })
+        );
+    }
+
+    private void processFeedRemoval(FeedUpdateTask task) {
+        // Удаляем пост из лент всех целевых пользователей
+        task.getTargetUserIds().forEach(userId ->
+                executorService.submit(() -> {
+                    try {
+                        // Удаляем пост из ленты пользователя
+                        feedService.removePostFromFeed(userId, task.getPostId());
+                        log.debug("Пост {} успешно удален из ленты пользователя {}", task.getPostId(), userId);
+                    } catch (Exception e) {
+                        log.error("Ошибка при удалении поста {} из ленты пользователя {}", task.getPostId(), userId, e);
+                    }
+                })
+        );
+    }
+}
+
+
+// file: backend/src/main/java/ru/otus/backend/controller/AuthController.java
+package ru.otus.backend.controller;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+import ru.otus.backend.model.AuthRequest;
+import ru.otus.backend.model.AuthResponse;
+import ru.otus.backend.model.User;
+import ru.otus.backend.service.JwtService;
+import ru.otus.backend.service.UserService;
+
+@RestController
+@RequiredArgsConstructor
+public class AuthController {
+
+    private final AuthenticationManager authenticationManager;
+
+    private final JwtService jwtService;
+
+    private final UserService userService;
+
+    @PostMapping("/login")
+    public ResponseEntity<AuthResponse> createAuthenticationToken(@RequestBody AuthRequest authRequest) throws Exception {
+        try {
+            authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(authRequest.getUsername(), authRequest.getPassword())
+            );
+        } catch (Exception e) {
+            throw new Exception("Incorrect username or password", e);
+        }
+
+        User user = userService.findByUsername(authRequest.getUsername());
+        String jwt = jwtService.generateToken(user);
+
+        return ResponseEntity.ok(new AuthResponse(jwt));
+    }
+}
+
+
+// file: backend/src/main/java/ru/otus/backend/controller/PostController.java
+// PostController.java
+package ru.otus.backend.controller;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.*;
+import ru.otus.backend.model.Post;
+import ru.otus.backend.model.User;
+import ru.otus.backend.service.FeedService;
+import ru.otus.backend.service.PostService;
+import ru.otus.backend.service.UserService;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/post")
+@RequiredArgsConstructor
+public class PostController {
+
+    private final PostService postService;
+    private final FeedService feedService;
+    private final UserService userService;
+
+    @PostMapping("/create")
+    public ResponseEntity<Post> createPost(@RequestBody Post post, Authentication auth) {
+        User user = userService.findByUsername(auth.getName());
+        post.setUserId(user.getId());
+
+        Post createdPost = postService.createPost(post);
+        return ResponseEntity.status(HttpStatus.CREATED).body(createdPost);
+    }
+
+    @PostMapping("/update")
+    public ResponseEntity<Post> updatePost(@RequestBody Post post, Authentication auth) {
+        User user = userService.findByUsername(auth.getName());
+        post.setUserId(user.getId());
+
+        Post updatedPost = postService.updatePost(post);
+        if (updatedPost == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
+
+        return ResponseEntity.ok(updatedPost);
+    }
+
+    @PostMapping("/delete")
+    public ResponseEntity<Void> deletePost(@RequestParam Long postId, Authentication auth) {
+        User user = userService.findByUsername(auth.getName());
+
+        postService.deletePost(postId, user.getId());
+        return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/get")
+    public ResponseEntity<Post> getPost(@RequestParam Long postId) {
+        Post post = postService.getPost(postId);
+        if (post == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
+
+        return ResponseEntity.ok(post);
+    }
+
+    @GetMapping("/feed")
+    public ResponseEntity<List<Post>> getFeed(
+            @RequestParam(name = "offset", defaultValue = "0") int offset,
+            @RequestParam(name = "limit", defaultValue = "20") int limit,
+            Authentication auth) {
+
+        User user = userService.findByUsername(auth.getName());
+        List<Post> feed = feedService.getFeed(user.getId(), limit, offset);
+
+        return ResponseEntity.ok(feed);
+    }
+}
+
+// file: backend/src/main/java/ru/otus/backend/controller/UserController.java
+package ru.otus.backend.controller;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.bind.annotation.*;
+import ru.otus.backend.model.User;
+import ru.otus.backend.repository.UserRepository;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/user")
+@RequiredArgsConstructor
+public class UserController {
+
+    private final UserRepository userRepository;
+
+    private final PasswordEncoder passwordEncoder;
+
+    @PostMapping("/register")
+    public ResponseEntity<String> registerUser(@RequestBody User user) {
+
+        // Хэшируем пароль перед сохранением
+        String encodedPassword = passwordEncoder.encode(user.getPassword());
+        user.setPassword(encodedPassword);
+
+        userRepository.save(user);
+
+        return ResponseEntity.ok("User registered successfully");
+    }
+
+    @GetMapping("/get/{id}")
+    public ResponseEntity<User> getUser(@PathVariable("id") Long id) {
+
+        User user = userRepository.findById(id);
+
+        if (user == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(null);
+        }
+
+        return ResponseEntity.ok(user);
+    }
+
+    @GetMapping("/search")
+    public ResponseEntity<List<User>> searchUsers(
+            @RequestParam("first_name") String firstName,
+            @RequestParam("last_name") String lastName)
+    {
+        List<User> users = userRepository.findByFirstNameContainingAndLastNameContaining(firstName, lastName);
+
+        if (users.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(null);
+        }
+
+        return ResponseEntity.ok(users);
+    }
+}
+
+
+// file: backend/src/main/java/ru/otus/backend/controller/DialogController.java
+package ru.otus.backend.controller;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import ru.otus.backend.client.DialogFeignClient;
+import ru.otus.backend.model.DialogMessage;
+import ru.otus.backend.model.DialogMessageRequest;
+
+import java.util.List;
+
+@Slf4j
+@RestController
+@RequestMapping("/dialog")
+@RequiredArgsConstructor
+public class DialogController {
+
+    private final DialogServiceClient client;
+
+    @PostMapping("/{user_id}/send")
+    public ResponseEntity<Void> sendMessage(
+            @PathVariable("user_id") Long toUserId,
+            @RequestBody DialogMessageRequest request) {
+
+        client.sendMessage(toUserId, request);
+        return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/{user_id}/list")
+    public ResponseEntity<List<DialogMessage>> getDialogMessages(
+            @PathVariable("user_id") Long otherUserId) {
+
+        return ResponseEntity.ok(client.getDialogMessages(otherUserId));
+    }
+}
+
+
+
+// file: backend/src/main/java/ru/otus/backend/controller/FriendController.java
+package ru.otus.backend.controller;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.*;
+import ru.otus.backend.model.User;
+import ru.otus.backend.service.FriendshipService;
+import ru.otus.backend.service.UserService;
+
+@RestController
+@RequestMapping("/friend")
+@RequiredArgsConstructor
+public class FriendController {
+
+    private final FriendshipService friendshipService;
+    private final UserService userService;
+
+    @PostMapping("/add")
+    public ResponseEntity<Void> addFriend(@RequestParam("friendId") Long friendId, Authentication auth) {
+        User user = userService.findByUsername(auth.getName());
+
+        // Проверяем, что пользователь с friendId существует
+        User friend = userService.findById(friendId);
+        if (friend == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        // Добавляем друга
+        friendshipService.addFriend(user.getId(), friendId);
+
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/delete")
+    public ResponseEntity<Void> deleteFriend(@RequestParam Long friendId, Authentication auth) {
+        User user = userService.findByUsername(auth.getName());
+
+        friendshipService.deleteFriend(user.getId(), friendId);
+
+        return ResponseEntity.ok().build();
+    }
+}
+
+// file: backend/src/main/java/ru/otus/backend/controller/WebSocketController.java
+package ru.otus.backend.controller;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.messaging.handler.annotation.MessageMapping;
+import org.springframework.messaging.handler.annotation.Payload;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.stereotype.Controller;
+import ru.otus.backend.model.Post;
+
+@Controller
+@RequiredArgsConstructor
+public class WebSocketController {
+
+    private final SimpMessagingTemplate messagingTemplate;
+
+    /**
+     * Метод для отправки сообщения о новом посте конкретному пользователю
+     */
+    public void sendPostNotification(Long userId, Post post) {
+        String destination = "/post/feed/posted";
+        messagingTemplate.convertAndSendToUser(userId.toString(), destination, post);
+    }
+
+    /**
+     * Метод для отправки сообщения всем подписанным на канал (для тестирования)
+     */
+    @MessageMapping("/broadcast")
+    public void broadcastMessage(@Payload String message) {
+        messagingTemplate.convertAndSend("/topic/public", message);
+    }
+}
+
+
+// file: backend/src/main/java/ru/otus/backend/controller/CacheDebugController.java
+package ru.otus.backend.controller;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ZSetOperations;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * Контроллер для отладки и проверки состояния кеша Redis.
+ * Предоставляет API-конечные точки для проверки содержимого кеша лент пользователей.
+ */
+@RestController
+@RequestMapping("/debug")
+@RequiredArgsConstructor
+public class CacheDebugController {
+
+    private final RedisTemplate<String, Object> redisTemplate;
+
+    private static final String FEED_CACHE_PREFIX = "feed:";
+
+    /**
+     * Получает информацию о кеше ленты для конкретного пользователя.
+     *
+     * @param userId ID пользователя
+     * @return Информация о кеше ленты пользователя
+     */
+    @GetMapping("/cache/feed/{userId}")
+    public ResponseEntity<Map<String, Object>> getFeedCache(@PathVariable(name = "userId") Long userId) {
+        String cacheKey = FEED_CACHE_PREFIX + userId;
+        Map<String, Object> result = new HashMap<>();
+
+        // Проверяем существование кеша
+        Boolean exists = redisTemplate.hasKey(cacheKey);
+        result.put("exists", exists);
+
+        // Если кеш не существует, возвращаем только информацию о его отсутствии
+        if (!exists) {
+            return ResponseEntity.ok(result);
+        }
+
+        // Получаем и добавляем информацию о TTL кеша
+        Long ttl = redisTemplate.getExpire(cacheKey);
+        result.put("ttl", ttl);
+
+        // Получаем размер Sorted Set (количество постов в ленте)
+        Long size = redisTemplate.opsForZSet().size(cacheKey);
+        result.put("size", size);
+
+        // Получаем все элементы Sorted Set (ID постов и их score)
+        Set<ZSetOperations.TypedTuple<Object>> postsWithScores =
+                redisTemplate.opsForZSet().reverseRangeWithScores(cacheKey, 0, -1);
+
+        // Формируем список постов с их score (метка времени) для ответа
+        List<Map<String, Object>> posts = new ArrayList<>();
+        if (postsWithScores != null) {
+            for (ZSetOperations.TypedTuple<Object> post : postsWithScores) {
+                Map<String, Object> postInfo = new HashMap<>();
+                postInfo.put("id", post.getValue());
+                postInfo.put("score", post.getScore());
+                posts.add(postInfo);
+            }
+        }
+
+        result.put("posts", posts);
+
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * Получает общую информацию о всех кешах лент в Redis.
+     *
+     * @return Общая информация о кешах лент
+     */
+    @GetMapping("/cache/feeds")
+    public ResponseEntity<Map<String, Object>> getAllFeedCaches() {
+        Map<String, Object> result = new HashMap<>();
+
+        // Получаем все ключи, начинающиеся с feed:
+        Set<String> feedKeys = redisTemplate.keys(FEED_CACHE_PREFIX + "*");
+        result.put("totalCaches", feedKeys != null ? feedKeys.size() : 0);
+
+        // Собираем базовую информацию по каждому кешу (без постов)
+        Map<String, Object> feeds = new HashMap<>();
+        if (feedKeys != null) {
+            for (String key : feedKeys) {
+                Map<String, Object> feedInfo = new HashMap<>();
+
+                Long size = redisTemplate.opsForZSet().size(key);
+                feedInfo.put("size", size);
+
+                Long ttl = redisTemplate.getExpire(key);
+                feedInfo.put("ttl", ttl);
+
+                feeds.put(key, feedInfo);
+            }
+        }
+
+        result.put("feeds", feeds);
+
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * Проверяет существование поста в кеше ленты конкретного пользователя.
+     *
+     * @param userId ID пользователя
+     * @param postId ID поста
+     * @return Информация о наличии поста в кеше ленты
+     */
+    @GetMapping("/cache/feed/{userId}/post/{postId}")
+    public ResponseEntity<Map<String, Object>> checkPostInFeed(
+            @PathVariable(name = "userId") Long userId,
+            @PathVariable(name = "postId") Long postId) {
+
+        String cacheKey = FEED_CACHE_PREFIX + userId;
+        Map<String, Object> result = new HashMap<>();
+
+        // Проверяем существование кеша
+        Boolean exists = redisTemplate.hasKey(cacheKey);
+        result.put("cacheExists", exists != null && exists);
+
+        if (exists) {
+            // Проверяем наличие поста в кеше (его score)
+            Double score = redisTemplate.opsForZSet().score(cacheKey, postId.toString());
+            result.put("postExists", score != null);
+
+            if (score != null) {
+                result.put("score", score);
+            }
+        } else {
+            result.put("postExists", false);
+        }
+
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * Принудительно очищает кеш ленты пользователя (для тестирования).
+     *
+     * @param userId ID пользователя
+     * @return Информация об операции
+     */
+    @GetMapping("/cache/feed/{userId}/clear")
+    public ResponseEntity<Map<String, Object>> clearFeedCache(@PathVariable(name = "userId") Long userId) {
+        String cacheKey = FEED_CACHE_PREFIX + userId;
+        Map<String, Object> result = new HashMap<>();
+
+        Boolean deleted = redisTemplate.delete(cacheKey);
+        result.put("deleted", deleted != null && deleted);
+
+        return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/cache/clear-all")
+    public ResponseEntity<Map<String, Object>> clearAllFeedCaches() {
+        Map<String, Object> result = new HashMap<>();
+
+        Set<String> feedKeys = redisTemplate.keys(FEED_CACHE_PREFIX + "*");
+        if (feedKeys != null && !feedKeys.isEmpty()) {
+            Long deletedCount = redisTemplate.delete(feedKeys);
+            result.put("deletedCachesCount", deletedCount);
+        } else {
+            result.put("deletedCachesCount", 0);
+        }
+
+        return ResponseEntity.ok(result);
+    }
+}
+
+// file: backend/src/main/java/ru/otus/backend/repository/PostRepository.java
+package ru.otus.backend.repository;
+
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
+import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
+import ru.otus.backend.model.Post;
+
+import java.sql.PreparedStatement;
+import java.sql.Statement;
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Objects;
+
+@Repository
+public class PostRepository {
+
+    private final JdbcTemplate jdbcTemplate;
+    private final RowMapper<Post> postRowMapper;
+
+    public PostRepository(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+        this.postRowMapper = (rs, rowNum) -> {
+            Post post = new Post();
+            post.setId(rs.getLong("id"));
+            post.setUserId(rs.getLong("user_id"));
+            post.setContent(rs.getString("content"));
+            post.setCreatedAt(rs.getTimestamp("created_at").toLocalDateTime());
+            return post;
+        };
+    }
+
+    @Transactional
+    public Post save(Post post) {
+        if (post.getId() == null) {
+            // Создание нового поста
+            KeyHolder keyHolder = new GeneratedKeyHolder();
+            jdbcTemplate.update(connection -> {
+                PreparedStatement ps = connection.prepareStatement(
+                        "INSERT INTO posts (user_id, content, created_at) VALUES (?, ?, ?)",
+                        Statement.RETURN_GENERATED_KEYS
+                );
+                ps.setLong(1, post.getUserId());
+                ps.setString(2, post.getContent());
+                ps.setTimestamp(3, post.getCreatedAt() != null ?
+                        Timestamp.valueOf(post.getCreatedAt()) :
+                        Timestamp.valueOf(LocalDateTime.now()));
+                return ps;
+            }, keyHolder);
+
+            post.setId((Long) Objects.requireNonNull(keyHolder.getKeys()).get("id"));
+        } else {
+            // Обновление существующего поста
+            jdbcTemplate.update(
+                    "UPDATE posts SET content = ? WHERE id = ? AND user_id = ?",
+                    post.getContent(), post.getId(), post.getUserId());
+        }
+        return post;
+    }
+
+    @Transactional(readOnly = true)
+    public Post findById(Long id) {
+        return jdbcTemplate.queryForObject(
+                "SELECT * FROM posts WHERE id = ?",
+                new Object[]{id},
+                postRowMapper
+        );
+    }
+
+    @Transactional
+    public void deleteById(Long id, Long userId) {
+        jdbcTemplate.update(
+                "DELETE FROM posts WHERE id = ? AND user_id = ?",
+                id, userId
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public List<Post> findByUserIdOrderByCreatedAtDesc(Long userId, int limit) {
+        return jdbcTemplate.query(
+                "SELECT * FROM posts WHERE user_id = ? ORDER BY created_at DESC LIMIT ?",
+                new Object[]{userId, limit},
+                postRowMapper
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public List<Post> findByUserIdsOrderByCreatedAtDesc(List<Long> userIds, int limit) {
+        // Конвертируем список ID в строку для SQL запроса
+        String inClause = String.join(",", userIds.stream().map(String::valueOf).toArray(String[]::new));
+
+        return jdbcTemplate.query(
+                "SELECT * FROM posts WHERE user_id IN (" + inClause + ") ORDER BY created_at DESC LIMIT ?",
+                new Object[]{limit},
+                postRowMapper
+        );
+    }
+}
+
+
+// file: backend/src/main/java/ru/otus/backend/repository/UserRepository.java
+package ru.otus.backend.repository;
+
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
+import ru.otus.backend.mapper.UserRowMapper;
+import ru.otus.backend.model.User;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+
+@Repository
+public class UserRepository {
+
+    private final NamedParameterJdbcTemplate jdbcTemplate;
+
+    public UserRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    @Transactional
+    public void save(User user) {
+
+        String sql = "INSERT INTO users (first_name, last_name, birth_date, gender, interests, city, username, password) " +
+                "VALUES (:firstName, :lastName, :birthDate, :gender, :interests, :city, :username, :password)";
+
+        Map<String, Object> params = new HashMap<>();
+        params.put("firstName", user.getFirstName());
+        params.put("lastName", user.getLastName());
+        params.put("birthDate", user.getBirthDate());
+        params.put("gender", user.getGender());
+        params.put("interests", user.getInterests());
+        params.put("city", user.getCity());
+        params.put("username", user.getUsername());
+        params.put("password", user.getPassword());
+
+        jdbcTemplate.update(sql, params);
+    }
+
+    @Transactional(readOnly = true) // Операция чтения - идет на slave
+    public User findById(Long id) {
+
+        String sql = "SELECT * FROM users WHERE id = :id";
+
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("id", id);
+
+        return jdbcTemplate.queryForObject(sql, params, new UserRowMapper());
+    }
+
+    @Transactional(readOnly = true) // Операция чтения - идет на slave
+    public User findByUsername(String username) {
+
+        String sql = "SELECT * FROM users WHERE username = :username";
+
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("username", username);
+
+        return jdbcTemplate.queryForObject(sql, params, new UserRowMapper());
+    }
+
+    @Transactional(readOnly = true) // Операция чтения - идет на slave
+    public List<User> findByFirstNameContainingAndLastNameContaining(String firstName, String lastName) {
+        String sql = "SELECT * FROM users WHERE first_name LIKE :first_name AND last_name LIKE :last_name";
+
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("first_name", firstName + "%")
+                .addValue("last_name", lastName + "%");
+
+        return jdbcTemplate.query(sql, params, new UserRowMapper());
+    }
+}
+
+
+// file: backend/src/main/java/ru/otus/backend/repository/FriendshipRepository.java
+package ru.otus.backend.repository;
+
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
+import ru.otus.backend.model.Friendship;
+
+import java.util.List;
+
+@Repository
+public class FriendshipRepository {
+
+    private final JdbcTemplate jdbcTemplate;
+
+    public FriendshipRepository(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    /**
+     * Подсчитывает количество друзей у пользователя
+     * @param userId ID пользователя
+     * @return количество друзей
+     */
+    @Transactional(readOnly = true)
+    public int countFriendsByUserId(Long userId) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM friendships WHERE user_id = ?",
+                Integer.class,
+                userId
+        );
+        return count != null ? count : 0;
+    }
+
+    @Transactional
+    public void save(Friendship friendship) {
+        jdbcTemplate.update(
+                "INSERT INTO friendships (user_id, friend_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
+                friendship.getUserId(), friendship.getFriendId()
+        );
+    }
+
+    @Transactional
+    public void delete(Long userId, Long friendId) {
+        jdbcTemplate.update(
+                "DELETE FROM friendships WHERE user_id = ? AND friend_id = ?",
+                userId, friendId
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public List<Long> findFriendIdsByUserId(Long userId) {
+        return jdbcTemplate.queryForList(
+                "SELECT friend_id FROM friendships WHERE user_id = ?",
+                Long.class,
+                userId
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public boolean existsFriendship(Long userId, Long friendId) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM friendships WHERE user_id = ? AND friend_id = ?",
+                Integer.class,
+                userId, friendId
+        );
+        return count != null && count > 0;
+    }
+}
+
+
+// file: backend/src/main/java/ru/otus/backend/BackendApplication.java
+package ru.otus.backend;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class BackendApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(BackendApplication.class, args);
+    }
+
+}
+
+
+// file: backend/src/main/resources/sql/feeds.sql
+CREATE TABLE IF NOT EXISTS feeds (
+    id SERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    post_id BIGINT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    CONSTRAINT unique_feed_item UNIQUE (user_id, post_id),
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (post_id) REFERENCES posts(id)
+);
+
+// file: backend/src/main/resources/sql/posts.sql
+CREATE TABLE IF NOT EXISTS posts (
+    id BIGSERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id),
+    content TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
+
+// file: backend/src/main/resources/sql/users.sql
+CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY,
+    first_name VARCHAR(100),
+    last_name VARCHAR(100),
+    birth_date DATE,
+    gender VARCHAR(10),
+    interests TEXT,
+    city VARCHAR(100),
+    username VARCHAR(100) UNIQUE,
+    password VARCHAR(255)
+)
+
+// file: backend/src/main/resources/sql/messages.sql
+CREATE TABLE IF NOT EXISTS messages (
+    id BIGSERIAL,
+    from_user_id BIGINT NOT NULL,
+    to_user_id BIGINT NOT NULL,
+    content TEXT NOT NULL,
+    dialog_id TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (id, dialog_id)
+);
+
+// file: backend/src/main/resources/sql/friendships.sql
+CREATE TABLE IF NOT EXISTS friendships (
+    user_id INT REFERENCES users(id) ON DELETE CASCADE,
+    friend_id INT REFERENCES users(id) ON DELETE CASCADE,
+    PRIMARY KEY (user_id, friend_id)
+)
+
+// file: backend/src/main/resources/sql/insert_feeds.sql
+-- Заполняем таблицу feeds данными о постах для лент пользователей
+-- Для каждой пары дружбы (пользователь -> друг) добавляем последние посты друга в ленту пользователя
+
+INSERT INTO feeds (user_id, post_id, created_at)
+SELECT
+    f.user_id,                      -- ID пользователя, чья лента пополняется
+    p.id AS post_id,                -- ID поста друга
+    NOW() - INTERVAL '1 minute' * RANDOM() * 1000  -- Случайное время добавления в ленту
+FROM
+    friendships f                   -- Берем все связи дружбы
+JOIN
+    posts p ON f.friend_id = p.user_id  -- Присоединяем посты, где автор - друг пользователя
+-- Ограничиваем количество постов для каждого пользователя (не более 1000 последних от друзей)
+WHERE
+    p.id IN (
+        SELECT p2.id
+        FROM posts p2
+        WHERE p2.user_id = f.friend_id
+        ORDER BY p2.created_at DESC  -- Сортируем по времени создания
+        LIMIT 1000                   -- Берем не более 1000 постов
+    )
+ORDER BY
+    RANDOM()  -- Случайный порядок для разнообразия
+LIMIT
+    10000;    -- Общее ограничение на количество записей в feeds
+
+// file: backend/src/main/resources/sql/insert_users.sql
+INSERT INTO users (first_name, last_name, birth_date, city, username, password)
+VALUES
+('zaur', 'dadaev', '2012-01-01', 'Воткинск', 'zaur', '$2a$12$MxHoAHCxOUaW5B6smg32FeniZiqhAJX2VfVCs4PH7Z4VW5Bo/wg4a'),
+('Абрамов', 'Роберт', '2012-01-01', 'Воткинск', 'lenin', '$2a$12$seFYnHkbMCZVWsShxpt0uuvYQ7e8oGXrLuSl5NbN7pYotHkJYe4Ci'),
+('Абрамов', 'Александр', '1916-01-01', 'Домодедово', 'carl', '$2a$12$seFYnHkbMCZVWsShxpt0uuvYQ7e8oGXrLuSl5NbN7pYotHkJYe4Ci'),
+('Абрамов', 'Илья', '1912-01-01', 'Севастополь', 'k1zx8ybn', 'pwd'),
+('Абрамов', 'Даниил', '1918-01-01', 'Ржев', 'p5330t6o', 'pwd'),
+('Абрамов', 'Лев', '2007-01-01', 'Когалым', 'navufddj', 'pwd'),
+('Абрамов', 'Игорь', '2009-01-01', 'Дзержинск', 'ee4mfl92', 'pwd'),
+('Абрамов', 'Никита', '1981-01-01', 'Балашов', 'piydccz4', 'pwd'),
+('Абрамов', 'Юрий', '1935-01-01', 'Серпухов', 'v13tnonh', 'pwd'),
+('Абрамов', 'Егор', '1962-01-01', 'Ногинск', 'g6gumtyz', 'pwd'),
+('Абрамов', 'Всеволод', '1906-01-01', 'Новомосковск', 'uj732m2c', 'pwd'),
+('Абрамов', 'Демид', '1928-01-01', 'Обнинск', 's6cpqb8b', 'pwd'),
+('Абрамов', 'Александр', '1915-01-01', 'Омск', 'do5j173w', 'pwd'),
+('Абрамов', 'Лука', '1916-01-01', 'Лесосибирск', 'xwdyidqo', 'pwd'),
+('Абрамов', 'Дмитрий', '1986-01-01', 'Хасавюрт', 'csvx7ua2', 'pwd'),
+('Абрамов', 'Александр', '1923-01-01', 'Красноярск', '99c9q4x6', 'pwd'),
+('Абрамов', 'Иван', '2002-01-01', 'Барнаул', 'aj3r1xb8', 'pwd'),
+('Абрамов', 'Лука', '1986-01-01', 'Магадан', 'oeg542ur', 'pwd'),
+('Абрамов', 'Георгий', '1994-01-01', 'Волжск', '1alv2137', 'pwd'),
+('Абрамов', 'Александр', '1946-01-01', 'Энгельс', 'pr3yxl46', 'pwd'),
+('Абрамов', 'Ярослав', '1968-01-01', 'Севастополь', 'qmp8ebwh', 'pwd'),
+('Абрамов', 'Платон', '1930-01-01', 'Искитим', 'a7drj1nr', 'pwd'),
+('Абрамов', 'Тимофей', '1909-01-01', 'Лиски', 'm0f2evij', 'pwd'),
+('Абрамов', 'Мирослав', '2000-01-01', 'Челябинск', 'k0i4joie', 'pwd'),
+('Абрамов', 'Кирилл', '1975-01-01', 'Елец', '9dufr10i', 'pwd'),
+('Абрамов', 'Евгений', '1964-01-01', 'Междуреченск', '82btqxod', 'pwd'),
+('Абрамов', 'Александр', '1976-01-01', 'Верхняя Пышма', 'nl40jawg', 'pwd'),
+('Абрамов', 'Роман', '1994-01-01', 'Ленинск-Кузнецкий', 'l3cfo7yl', 'pwd'),
+('Абрамов', 'Антон', '1973-01-01', 'Ижевск', 'l1ms45xa', 'pwd'),
+('Абрамов', 'Николай', '1945-01-01', 'Красноярск', 'blbjb39q', 'pwd'),
+('Абрамов', 'Андрей', '1980-01-01', 'Южно-Сахалинск', 'felofece', 'pwd'),
+('Абрамов', 'Савва', '1932-01-01', 'Томск', 'nsx7ifd7', 'pwd'),
+('Абрамов', 'Дмитрий', '2008-01-01', 'Бузулук', 'waymqzsk', 'pwd'),
+('Абрамов', 'Артём', '2007-01-01', 'Комсомольск-на-Амуре', 's2kqr5vn', 'pwd'),
+('Абрамов', 'Егор', '2012-01-01', 'Ишим', 'ygz4iq7d', 'pwd'),
+('Абрамов', 'Богдан', '1980-01-01', 'Свободный', 'u4os3ie0', 'pwd'),
+('Абрамов', 'Тимофей', '1920-01-01', 'Геленджик', '2qqnmllv', 'pwd'),
+('Абрамов', 'Кирилл', '1931-01-01', 'Бийск', 'or5oqbju', 'pwd'),
+('Абрамов', 'Владимир', '1946-01-01', 'Борисоглебск', 'fkzn6znj', 'pwd'),
+('Абрамов', 'Никита', '1946-01-01', 'Калуга', 'ky8bniq9', 'pwd');
+
+
+// file: backend/src/main/resources/sql/insert_friendships.sql
+INSERT INTO friendships (user_id, friend_id)
+SELECT u1.id AS user_id, u2.id AS friend_id
+FROM users u1
+CROSS JOIN users u2
+WHERE u1.id <> u2.id -- Исключаем случаи, когда user_id = friend_id
+AND NOT EXISTS (
+    SELECT 1 FROM friendships f
+    WHERE f.user_id = u1.id AND f.friend_id = u2.id
+)
+ORDER BY
+    -- Отдаем приоритет отношениям, где user_id = 1 или friend_id = 1
+    CASE WHEN u1.id = 1 OR u2.id = 1 THEN 0 ELSE 1 END,
+    RANDOM() -- Затем случайный порядок для остальных
+LIMIT 50;
+
+// file: backend/src/main/resources/static/feed-client.html
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Лента новостей в реальном времени</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        #feed {
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin-top: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .post {
+            border-bottom: 1px solid #eee;
+            padding: 10px 0;
+        }
+        .post .author {
+            font-weight: bold;
+        }
+        .post .content {
+            margin: 5px 0;
+        }
+        .post .timestamp {
+            color: #888;
+            font-size: 0.8em;
+        }
+        .controls {
+            margin-bottom: 20px;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        input[type="text"], input[type="number"] {
+            padding: 8px;
+            margin-right: 10px;
+        }
+        .status {
+            margin-top: 10px;
+            color: #888;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/stomp-websocket@2.3.4-next/lib/stomp.min.js"></script>
+    <script type="text/javascript">
+        let stompClient = null;
+        let userId = 1; // По умолчанию используем пользователя с ID 1
+        let token = null;
+
+        function connect() {
+            let socket = new SockJS('/ws');
+            stompClient = Stomp.over(socket);
+
+            // Добавляем JWT токен в заголовки, если он есть
+            let headers = {};
+            if (token) {
+                headers['Authorization'] = 'Bearer ' + token;
+            }
+
+            stompClient.connect(headers, function (frame) {
+                setConnected(true);
+                console.log('Connected: ' + frame);
+
+                // Подписываемся на канал уведомлений о новых постах
+                stompClient.subscribe('/user/' + userId + '/post/feed/posted', function (message) {
+                    console.log(message);
+                    addPostToFeed(JSON.parse(message.body));
+                });
+            }, function(error) {
+                console.log('Error: ' + error);
+                setConnected(false);
+                setTimeout(connect, 5000); // Пытаемся переподключиться каждые 5 секунд
+            });
+        }
+
+        function disconnect() {
+            if (stompClient !== null) {
+                stompClient.disconnect();
+            }
+            setConnected(false);
+            console.log("Disconnected");
+        }
+
+        function setConnected(connected) {
+            document.getElementById('connect').disabled = connected;
+            document.getElementById('disconnect').disabled = !connected;
+            document.getElementById('connectionStatus').textContent = connected ?
+                'Статус: Подключен' : 'Статус: Отключен';
+        }
+
+        function addPostToFeed(message) {
+            let post = message.payload;
+            let feed = document.getElementById('feed');
+
+            let postElement = document.createElement('div');
+            postElement.className = 'post';
+
+            let authorElement = document.createElement('div');
+            authorElement.className = 'author';
+            authorElement.textContent = 'Пользователь ID: ' + post.userId;
+
+            let contentElement = document.createElement('div');
+            contentElement.className = 'content';
+            contentElement.textContent = post.content;
+
+            let timestampElement = document.createElement('div');
+            timestampElement.className = 'timestamp';
+            let date = new Date(post.timestamp * 1000);
+            timestampElement.textContent = date.toLocaleString();
+
+            postElement.appendChild(authorElement);
+            postElement.appendChild(contentElement);
+            postElement.appendChild(timestampElement);
+
+            feed.insertBefore(postElement, feed.firstChild);
+        }
+
+        function setUserId() {
+            userId = parseInt(document.getElementById('userIdInput').value);
+            disconnect();
+            connect();
+        }
+
+        function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            fetch('/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    username: username,
+                    password: password
+                })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    token = data.jwt;
+                    document.getElementById('loginStatus').textContent = 'Вход выполнен успешно';
+                    // Разрываем существующее соединение и подключаемся с токеном
+                    disconnect();
+                    connect();
+                })
+                .catch(error => {
+                    console.error('Ошибка входа:', error);
+                    document.getElementById('loginStatus').textContent = 'Ошибка входа';
+                });
+        }
+
+        window.onload = function() {
+            // Автоматическое подключение при загрузке страницы
+            connect();
+        };
+    </script>
+</head>
+<body>
+<h1>Лента новостей в реальном времени</h1>
+
+<div class="controls">
+    <h3>Вход в систему:</h3>
+    <input type="text" id="username" placeholder="Имя пользователя"/>
+    <input type="password" id="password" placeholder="Пароль"/>
+    <button id="loginButton" onclick="login()">Войти</button>
+    <div id="loginStatus" class="status"></div>
+</div>
+
+<div class="controls">
+    <h3>Настройки WebSocket:</h3>
+    <button id="connect" onclick="connect()" disabled>Подключиться</button>
+    <button id="disconnect" onclick="disconnect()">Отключиться</button>
+    <div id="connectionStatus" class="status">Статус: Отключен</div>
+</div>
+
+<div class="controls">
+    <h3>ID пользователя для отслеживания ленты:</h3>
+    <input type="number" id="userIdInput" value="1"/>
+    <button onclick="setUserId()">Установить</button>
+</div>
+
+<h2>Лента новостей:</h2>
+<div id="feed"></div>
+</body>
+</html>
+
+// file: backend/src/main/resources/static/web-socket-test.html
+<!DOCTYPE html>
+<html lang="">
+<head>
+    <title>WebSocket Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/stomp-websocket@2.3.4-next/lib/stomp.min.js"></script>
+    <script type="text/javascript">
+        let stompClient = null;
+        let userId = "1"; // По умолчанию подписываемся на пользователя с ID 1
+
+        function connect() {
+            let socket = new SockJS('/ws');
+            stompClient = Stomp.over(socket);
+            stompClient.connect({}, function (frame) {
+                console.log('Connected: ' + frame);
+
+                // Подписываемся на канал публичных сообщений
+                stompClient.subscribe('/topic/public', function (message) {
+                    showMessage("Public: " + message.body);
+                });
+
+                // Подписываемся на канал уведомлений о новых постах
+                stompClient.subscribe('/user/' + userId + '/post/feed/posted', function (message) {
+                    showMessage("New post: " + message.body);
+                });
+            }, function(error) {
+                console.log('Error: ' + error);
+                setTimeout(connect, 5000); // Пытаемся переподключиться каждые 5 секунд
+            });
+        }
+
+        function disconnect() {
+            if (stompClient !== null) {
+                stompClient.disconnect();
+            }
+            console.log("Disconnected");
+        }
+
+        function sendMessage() {
+            let message = document.getElementById('message').value;
+            stompClient.send("/app/broadcast", {}, message);
+        }
+
+        function showMessage(message) {
+            let messageElement = document.createElement('div');
+            messageElement.textContent = message;
+            document.getElementById('messages').appendChild(messageElement);
+        }
+
+        function setUserId() {
+            userId = document.getElementById('userId').value;
+            if (stompClient) {
+                disconnect();
+                connect();
+            }
+        }
+    </script>
+</head>
+<body onload="connect()">
+<h1>WebSocket Test</h1>
+<div>
+    <label for="userId">User ID:</label>
+    <input type="text" id="userId" value="1"/>
+    <button onclick="setUserId()">Set User ID</button>
+</div>
+<div>
+    <label for="message">Message:</label>
+    <input type="text" id="message" />
+    <button onclick="sendMessage()">Send</button>
+</div>
+<button onclick="disconnect()">Disconnect</button>
+<div id="messages"></div>
+</body>
+</html>
+
+// file: backend/src/main/resources/application.yaml
+server:
+  port: 8085
+
+logging:
+  level:
+    org.springframework.jdbc.core.JdbcTemplate: INFO
+    org.springframework.jdbc.core.StatementCreatorUtils: INFO
+    org.springframework.jdbc.datasource: INFO
+    org.springframework.transaction.interceptor: INFO
+    com.zaxxer.hikari: INFO
+
+spring:
+  datasource:
+    master:
+      jdbc-url: jdbc:postgresql://z-social-network-hw4-postgres-master:5432/z-social-network
+      url: jdbc:postgresql://z-social-network-hw4-postgres-master:5432/z-social-network
+      username: root
+      password: root
+      driver-class-name: org.postgresql.Driver
+  kafka:
+    bootstrap-servers: kafka:9092
+    consumer:
+      group-id: feed-group
+      auto-offset-reset: earliest
+  # Конфигурация Redis
+  data:
+    redis:
+      host: redis
+      port: 6379
+      timeout: 2000
+
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: http://otel-collector:4318/v1/traces
+  endpoints:
+    web:
+      exposure:
+        include:
+          - health
+          - prometheus
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+
+dialog:
+  service:
+    url: http://dialog-service:8086
+
+
+
+
+// file: backend/src/main/resources/social-network.yaml
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "OTUS Highload Architect",
+    "version": "1.2.0"
+  },
+  "paths": {
+    "/login": {
+      "post": {
+        "description": "Упрощенный процесс аутентификации путем передачи идентификатор пользователя и получения токена для дальнейшего прохождения авторизации",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "$ref": "#/components/schemas/UserId"
+                  },
+                  "password": {
+                    "type": "string",
+                    "example": "Секретная строка"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Успешная аутентификация",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "token": {
+                      "type": "string",
+                      "example": "e4d2e6b0-cde2-42c5-aac3-0b8316f21e58"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Невалидные данные"
+          },
+          "404": {
+            "description": "Пользователь не найден"
+          },
+          "500": {
+            "$ref": "#/components/responses/5xx"
+          },
+          "503": {
+            "$ref": "#/components/responses/5xx"
+          }
+        }
+      }
+    },
+    "/user/register": {
+      "post": {
+        "description": "Регистрация нового пользователя",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "first_name": {
+                    "type": "string",
+                    "example": "Имя"
+                  },
+                  "second_name": {
+                    "type": "string",
+                    "example": "Фамилия"
+                  },
+                  "birthdate": {
+                    "$ref": "#/components/schemas/BirthDate"
+                  },
+                  "biography": {
+                    "type": "string",
+                    "example": "Хобби, интересы и т.п."
+                  },
+                  "city": {
+                    "type": "string",
+                    "example": "Москва"
+                  },
+                  "password": {
+                    "type": "string",
+                    "example": "Секретная строка"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Успешная регистрация",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user_id": {
+                      "type": "string",
+                      "example": "e4d2e6b0-cde2-42c5-aac3-0b8316f21e58"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Невалидные данные"
+          },
+          "500": {
+            "$ref": "#/components/responses/5xx"
+          },
+          "503": {
+            "$ref": "#/components/responses/5xx"
+          }
+        }
+      }
+    },
+    "/user/get/{id}": {
+      "get": {
+        "description": "Получение анкеты пользователя",
+        "parameters": [
+          {
+            "name": "id",
+            "schema": {
+              "$ref": "#/components/schemas/UserId"
+            },
+            "required": true,
+            "in": "path",
+            "description": "Идентификатор пользователя"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешное получение анкеты пользователя",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Невалидные данные"
+          },
+          "404": {
+            "description": "Анкета не найдена"
+          },
+          "500": {
+            "$ref": "#/components/responses/5xx"
+          },
+          "503": {
+            "$ref": "#/components/responses/5xx"
+          }
+        }
+      }
+    },
+    "/user/search": {
+      "get": {
+        "description": "Поиск анкет",
+        "parameters": [
+          {
+            "name": "first_name",
+            "schema": {
+              "type": "string",
+              "description": "Часть имени для поиска",
+              "example": "Конст"
+            },
+            "in": "query",
+            "required": true,
+            "description": "Условие поиска по имени"
+          },
+          {
+            "name": "last_name",
+            "schema": {
+              "type": "string",
+              "description": "Часть фамилии для поиска",
+              "example": "Оси"
+            },
+            "in": "query",
+            "required": true,
+            "description": "Условие поиска по фамилии"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешные поиск пользователя",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/User"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Невалидные данные"
+          },
+          "500": {
+            "$ref": "#/components/responses/5xx"
+          },
+          "503": {
+            "$ref": "#/components/responses/5xx"
+          }
+        }
+      }
+    },
+    "/friend/set/{user_id}": {
+      "put": {
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "schema": {
+              "$ref": "#/components/schemas/UserId"
+            },
+            "required": true,
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Пользователь успешно указал своего друга"
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "500": {
+            "$ref": "#/components/responses/5xx"
+          },
+          "503": {
+            "$ref": "#/components/responses/5xx"
+          }
+        }
+      }
+    },
+    "/friend/delete/{user_id}": {
+      "put": {
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "schema": {
+              "$ref": "#/components/schemas/UserId"
+            },
+            "required": true,
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Пользователь успешно удалил из друзей пользователя"
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "500": {
+            "$ref": "#/components/responses/5xx"
+          },
+          "503": {
+            "$ref": "#/components/responses/5xx"
+          }
+        }
+      }
+    },
+    "/post/create": {
+      "post": {
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["text"],
+                "properties": {
+                  "text": {
+                    "$ref": "#/components/schemas/PostText"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Успешно создан пост",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostId"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "500": {
+            "$ref": "#/components/responses/5xx"
+          },
+          "503": {
+            "$ref": "#/components/responses/5xx"
+          }
+        }
+      }
+    },
+    "/post/update": {
+      "put": {
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["id","text"],
+                "properties": {
+                  "id": {
+                    "$ref": "#/components/schemas/PostId"
+                  },
+                  "text": {
+                    "$ref": "#/components/schemas/PostText"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Успешно изменен пост"
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "500": {
+            "$ref": "#/components/responses/5xx"
+          },
+          "503": {
+            "$ref": "#/components/responses/5xx"
+          }
+        }
+      }
+    },
+    "/post/delete/{id}": {
+      "put": {
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "schema": {
+              "$ref": "#/components/schemas/PostId"
+            },
+            "required": true,
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешно удален пост"
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "500": {
+            "$ref": "#/components/responses/5xx"
+          },
+          "503": {
+            "$ref": "#/components/responses/5xx"
+          }
+        }
+      }
+    },
+    "/post/get/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "schema": {
+              "$ref": "#/components/schemas/PostId"
+            },
+            "required": true,
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешно получен пост",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Post"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "500": {
+            "$ref": "#/components/responses/5xx"
+          },
+          "503": {
+            "$ref": "#/components/responses/5xx"
+          }
+        }
+      }
+    },
+    "/post/feed": {
+      "get": {
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "offset",
+            "schema": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Оффсет с которого начинать выдачу",
+              "example": 100,
+              "default": 0
+            },
+            "required": false,
+            "in": "query"
+          },
+          {
+            "name": "limit",
+            "schema": {
+              "type": "number",
+              "minimum": 1,
+              "description": "Лимит, ограничивающий кол-во возвращенных сущностей",
+              "example": 10,
+              "default": 10
+            },
+            "required": false,
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешно получены посты друзей",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Post"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "500": {
+            "$ref": "#/components/responses/5xx"
+          },
+          "503": {
+            "$ref": "#/components/responses/5xx"
+          }
+        }
+      }
+    },
+    "/dialog/{user_id}/send": {
+      "post": {
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "schema": {
+              "$ref": "#/components/schemas/UserId"
+            },
+            "required": true,
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["text"],
+                "properties": {
+                  "text": {
+                    "$ref": "#/components/schemas/DialogMessageText"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Успешно отправлено сообщение"
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "500": {
+            "$ref": "#/components/responses/5xx"
+          },
+          "503": {
+            "$ref": "#/components/responses/5xx"
+          }
+        }
+      }
+    },
+    "/dialog/{user_id}/list": {
+      "get": {
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "schema": {
+              "$ref": "#/components/schemas/UserId"
+            },
+            "required": true,
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Диалог между двумя пользователями",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DialogMessage"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "500": {
+            "$ref": "#/components/responses/5xx"
+          },
+          "503": {
+            "$ref": "#/components/responses/5xx"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "responses": {
+      "400": {
+        "description": "Невалидные данные ввода"
+      },
+      "401": {
+        "description": "Неавторизованный доступ"
+      },
+      "5xx": {
+        "description": "Ошибка сервера",
+        "headers": {
+          "Retry-After": {
+            "description": "Время, через которое еще раз нужно сделать запрос",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "required": [
+                "message"
+              ],
+              "properties": {
+                "message": {
+                  "type": "string",
+                  "description": "Описание ошибки"
+                },
+                "request_id": {
+                  "type": "string",
+                  "description": "Идентификатор запроса. Предназначен для более быстрого поиска проблем."
+                },
+                "code": {
+                  "type": "integer",
+                  "description": "Код ошибки. Предназначен для классификации проблем и более быстрого решения проблем."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "BirthDate": {
+        "type": "string",
+        "description": "Дата рождения",
+        "format": "date",
+        "example": "2017-02-01"
+      },
+      "UserId": {
+        "type": "string",
+        "description": "Идентификатор пользователя"
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/UserId"
+          },
+          "first_name": {
+            "type": "string",
+            "example": "Имя",
+            "description": "Имя"
+          },
+          "second_name": {
+            "type": "string",
+            "example": "Фамилия",
+            "description": "Фамилия"
+          },
+          "birthdate": {
+            "$ref": "#/components/schemas/BirthDate"
+          },
+          "biography": {
+            "type": "string",
+            "example": "Хобби, интересы и т.п.",
+            "description": "Интересы"
+          },
+          "city": {
+            "type": "string",
+            "example": "Москва",
+            "description": "Город"
+          }
+        }
+      },
+      "PostId": {
+        "type": "string",
+        "description": "Идентификатор поста",
+        "example": "1d535fd6-7521-4cb1-aa6d-031be7123c4d"
+      },
+      "PostText": {
+        "type": "string",
+        "description": "Текст поста",
+        "example": "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Lectus mauris ultrices eros in cursus turpis massa."
+      },
+      "DialogMessageText": {
+        "type": "string",
+        "description": "Текст сообщения",
+        "example": "Привет, как дела?"
+      },
+      "DialogMessage": {
+        "type": "object",
+        "required": ["from", "to", "text"],
+        "properties": {
+          "from": {
+            "$ref": "#/components/schemas/UserId"
+          },
+          "to": {
+            "$ref": "#/components/schemas/UserId"
+          },
+          "text": {
+            "$ref": "#/components/schemas/DialogMessageText"
+          }
+        }
+      },
+      "Post": {
+        "type": "object",
+        "description": "Пост пользователя",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/PostId"
+          },
+          "text": {
+            "$ref": "#/components/schemas/PostText"
+          },
+          "author_user_id": {
+            "$ref": "#/components/schemas/UserId"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Авторизация по токену, который был получен в методе /login"
+      }
+    }
+  }
+}
+
+// file: backend/src/main/resources/application-feed.yaml
+server:
+  port: 8085
+
+spring:
+  application:
+    name: social-network-service
+
+  # Конфигурация DataSource
+  datasource:
+    master:
+      jdbc-url: ${SPRING_DATASOURCE_MASTER_URL:jdbc:postgresql://localhost:5432/z-social-network}
+      url: ${SPRING_DATASOURCE_MASTER_URL:jdbc:postgresql://localhost:5432/z-social-network}
+      username: ${SPRING_DATASOURCE_USERNAME:root}
+      password: ${SPRING_DATASOURCE_PASSWORD:root}
+      driver-class-name: org.postgresql.Driver
+
+  # Конфигурация Redis
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      timeout: 2000
+
+  # Конфигурация сессий
+  session:
+    store-type: redis
+    timeout: 1800s
+    redis:
+      namespace: spring:session
+      flush-mode: on-save
+
+  # Конфигурация Kafka
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ${INSTANCE_ID:default}-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+# Мониторинг и метрики
+management:
+  endpoints:
+    web:
+      exposure:
+        include:
+          - health
+          - prometheus
+          - info
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+
+# Логирование
+logging:
+  level:
+    root: INFO
+    ru.otus.backend: DEBUG
+    org.springframework.web.socket: DEBUG
+
+// file: backend/src/main/resources/application-sync.yaml
+server:
+  port: 8085
+
+logging:
+  level:
+    org.springframework.jdbc.core.JdbcTemplate: INFO
+    org.springframework.jdbc.core.StatementCreatorUtils: INFO
+    org.springframework.jdbc.datasource: INFO
+    org.springframework.transaction.interceptor: INFO
+    com.zaxxer.hikari: INFO
+
+spring:
+  datasource:
+    master:
+      jdbc-url: jdbc:postgresql://192.168.200.10:5000/z-social-network
+      url: jdbc:postgresql://192.168.200.10:5000/z-social-network
+      username: postgres
+      password: postgres
+      driver-class-name: org.postgresql.Driver
+    slave:
+      jdbc-url: jdbc:postgresql://192.168.200.10:5001/z-social-network
+      url: jdbc:postgresql://192.168.200.10:5001/z-social-network
+      username: postgres
+      password: postgres
+      driver-class-name: org.postgresql.Driver
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include:
+          - health
+          - prometheus
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+
+
+// file: backend/src/main/resources/application-async.yaml
+server:
+  port: 8085
+
+logging:
+  level:
+    org.springframework.jdbc.core.JdbcTemplate: INFO
+    org.springframework.jdbc.core.StatementCreatorUtils: INFO
+    org.springframework.jdbc.datasource: INFO
+    org.springframework.transaction.interceptor: INFO
+    com.zaxxer.hikari: INFO
+
+spring:
+  datasource:
+    master:
+      jdbc-url: jdbc:postgresql://z-social-network-hw3-postgres-master:5432/z-social-network
+      url: jdbc:postgresql://z-social-network-hw3-postgres-master:5432/z-social-network
+      username: root
+      password: root
+      driver-class-name: org.postgresql.Driver
+    slave:
+      jdbc-url: jdbc:postgresql://z-social-network-hw3-postgres-slave-1:5432/z-social-network
+      url: jdbc:postgresql://z-social-network-hw3-postgres-slave-1:5432/z-social-network
+      username: root
+      password: root
+      driver-class-name: org.postgresql.Driver
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include:
+          - health
+          - prometheus
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+
+
+
+

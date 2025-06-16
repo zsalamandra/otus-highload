@@ -1,0 +1,116 @@
+services:
+  z-postgres-master:
+    container_name: z-social-network-hw9-postgres-master
+    image: zsalamandra/master-db
+    build:
+      context: ./master
+      dockerfile: Dockerfile
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: z-social-network
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    volumes:
+      - ./backup:/tmp
+    networks:
+      - social-network
+
+  z-postgres-slave-1:
+    container_name: z-social-network-hw9-postgres-slave-1
+    image: zsalamandra/slave1-db
+    build:
+      context: ./slave-1
+      dockerfile: Dockerfile
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: z-social-network
+    ports:
+      - "15432:5432"
+    volumes:
+      - ./slave-1/postgres-data:/var/lib/postgresql/data
+    depends_on:
+      - z-postgres-master
+      - haproxy
+    networks:
+      - social-network
+
+  z-postgres-slave-2:
+    container_name: z-social-network-hw9-postgres-slave-2
+    image: zsalamandra/slave2-db
+    build:
+      context: ./slave-2
+      dockerfile: Dockerfile
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: z-social-network
+    ports:
+      - "25432:5432"
+    volumes:
+      - ./slave-2/postgres-data:/var/lib/postgresql/data
+    depends_on:
+      - z-postgres-master
+      - haproxy
+    networks:
+      - social-network
+
+  z-social-network-hw9-app-1:
+    container_name: z-social-network-hw9-app-1
+    image: zsalamandra/z-social-network-hw9
+    restart: unless-stopped
+    networks:
+      - social-network
+    depends_on:
+      - z-postgres-master
+    environment:
+      - JAVA_OPTS="-Xmx1024m -Xms512m"
+    ports:
+      - "8085:8085"
+    expose:
+      - "8085"
+
+  z-social-network-hw9-app-2:
+    container_name: z-social-network-hw9-app-2
+    image: zsalamandra/z-social-network-hw9
+    restart: unless-stopped
+    networks:
+      - social-network
+    depends_on:
+      - z-postgres-master
+      - z-social-network-hw9-app-1
+    environment:
+      - JAVA_OPTS="-Xmx1024m -Xms512m"
+    ports:
+      - "8086:8085"
+    expose:
+      - "8085"
+
+  z-social-network-hw9-nginx:
+    container_name: z-social-network-hw9-nginx
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - z-social-network-hw9-app-1
+      - z-social-network-hw9-app-2
+    networks:
+      - social-network
+
+  haproxy:
+    image: haproxy:alpine
+    container_name: z-social-network-hw9-haproxy
+    ports:
+      - "5001:5001"  # read only
+    volumes:
+      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    networks:
+      - social-network
+
+networks:
+  social-network:
+    driver: bridge
