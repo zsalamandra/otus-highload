@@ -1,0 +1,43 @@
+server:
+  port: 8085
+
+spring:
+  data:
+    redis:
+      host: redis
+      port: 6379
+      timeout: 2000
+
+  kafka:
+    bootstrap-servers: kafka:9092
+    consumer:
+      group-id: counter-service-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+
+  # Конфигурация для Tarantool
+  tarantool:
+    host: ${TARANTOOL_HOST:z-social-network-hw10-tarantool}
+    port: ${TARANTOOL_PORT:3301}
+    username: ${TARANTOOL_USERNAME:admin}
+    password: ${TARANTOOL_PASSWORD:pass}
+    # Настройки таймаутов и пула соединений
+    connection-timeout: 5000
+    socket-timeout: 5000
+    max-connections: 20
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include:
+          - health
+          - prometheus
+          - info
+  prometheus:
+    metrics:
+      export:
+        enabled: true

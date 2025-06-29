@@ -45,6 +45,14 @@ public class KafkaConfig {
     }
 
     @Bean
+    public NewTopic dialogEventsTopic() {
+        return TopicBuilder.name("dialog-events")
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
+
+    @Bean
     public NewTopic feedMaterializationTopic() {
         return TopicBuilder.name(FeedUpdateTask.TOPIC)
                 .partitions(3)

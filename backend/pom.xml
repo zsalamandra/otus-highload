@@ -13,6 +13,13 @@
     <version>0.0.1-SNAPSHOT</version>
     <description>backend</description>
 
+    <properties>
+        <java.version>17</java.version>
+        <spring.boot.version>3.2.5</spring.boot.version>
+        <spring.cloud.version>2023.0.1</spring.cloud.version>
+        <project.build.finalName>social-backend</project.build.finalName>
+    </properties>
+
     <dependencyManagement>
         <dependencies>
             <dependency>
@@ -25,17 +32,12 @@
             <dependency>
                 <groupId>org.springframework.cloud</groupId>
                 <artifactId>spring-cloud-dependencies</artifactId>
-                <version>Hoxton.RELEASE</version>
+                <version>${spring.cloud.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
         </dependencies>
     </dependencyManagement>
-
-    <properties>
-        <java.version>17</java.version>
-        <project.build.finalName>social-backend</project.build.finalName>
-    </properties>
 
     <dependencies>
 <!--        <dependency>-->
@@ -111,6 +113,10 @@
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-jackson</artifactId> <!-- or jjwt-gson if you prefer -->
             <version>0.11.2</version>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-openfeign</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

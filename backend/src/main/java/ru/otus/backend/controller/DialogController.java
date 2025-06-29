@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 import ru.otus.backend.model.DialogMessage;
 import ru.otus.backend.model.DialogMessageRequest;
@@ -46,5 +47,12 @@ public class DialogController {
         List<DialogMessage> messages = dialogService.getDialogMessages(currentUser.getId(), userId);
 
         return ResponseEntity.ok(messages);
+    }
+
+    @GetMapping("/counter/unread")
+    public long getUnreadCounter(Authentication auth) {
+
+        User currentUser = userService.findByUsername(auth.getName());
+        return dialogService.getUnreadCounter(currentUser.getId());
     }
 }
