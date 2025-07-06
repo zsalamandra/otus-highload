@@ -21,7 +21,7 @@ spring:
 
   # Конфигурация для Tarantool
   tarantool:
-    host: ${TARANTOOL_HOST:z-social-network-hw10-tarantool}
+    host: ${TARANTOOL_HOST:tarantool}
     port: ${TARANTOOL_PORT:3301}
     username: ${TARANTOOL_USERNAME:admin}
     password: ${TARANTOOL_PASSWORD:pass}
@@ -67,6 +67,7 @@ management:
         include:
           - health
           - prometheus
+          - info
   prometheus:
     metrics:
       export:

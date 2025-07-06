@@ -1,0 +1,250 @@
+version: '3.8'
+
+services:
+
+  tarantool:
+    container_name: z-social-network-hw11-tarantool
+    image: tarantool/tarantool:2.10.4
+    ports:
+      - "3301:3301"
+    volumes:
+      - ./tarantool/init.lua:/opt/tarantool/init.lua
+      - ./tarantool/app:/opt/tarantool/app
+      - tarantool-data:/var/lib/tarantool
+    environment:
+      TARANTOOL_USER_NAME: admin
+      TARANTOOL_USER_PASSWORD: pass
+    command: tarantool /opt/tarantool/init.lua
+    networks:
+      - social-network
+
+  # База данных PostgreSQL
+  postgres:
+    container_name: z-social-network-postgres
+    image: postgres:14
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: z-social-network
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - social-network
+
+  # Zookeeper для Kafka
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    container_name: z-social-network-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - social-network
+
+  # Kafka для очередей сообщений
+  kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    container_name: z-social-network-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    networks:
+      - social-network
+
+  akhq:
+    image: tchiotludo/akhq:latest
+    container_name: z-social-network-akhq
+    ports:
+      - "8088:8080"
+    depends_on:
+      - kafka
+    environment:
+      AKHQ_CONFIGURATION: |
+        akhq:
+          server:
+            servlet:
+              context-path: /
+            port: 8088
+          connections:
+            my-cluster:
+              properties:
+                bootstrap.servers: kafka:9092
+    networks:
+      - social-network
+
+  # Redis для кеширования и хранения WebSocket сессий
+  redis:
+    image: redis:alpine
+    container_name: z-social-network-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - social-network
+
+  # Redis Commander - UI для мониторинга Redis
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: z-social-network-redis-commander
+    restart: unless-stopped
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+      - HTTP_USER=admin
+      - HTTP_PASSWORD=secret
+    ports:
+      - "8081:8081"
+    networks:
+      - social-network
+    depends_on:
+      - redis
+
+  # Сервис социальной сети (первый экземпляр)
+  z-social-network-hw11-app:
+    container_name: z-social-network-app
+    image: zsalamandra/z-social-network-hw11
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    ports:
+      - "8085:8085"
+    environment:
+      - JAVA_OPTS="-Xmx1024m -Xms512m"
+      - SPRING_DATASOURCE_MASTER_URL=jdbc:postgresql://postgres:5432/z-social-network
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - SPRING_DATA_REDIS_HOST=redis
+      - TARANTOOL_HOST=z-social-network-hw11-tarantool
+      - TARANTOOL_PORT=3301
+      - TARANTOOL_USERNAME=admin
+      - TARANTOOL_PASSWORD=pass
+      - INSTANCE_ID=app-1
+      - INITIALIZER_NODE=app-1
+    networks:
+      - social-network
+    depends_on:
+      - postgres
+      - kafka
+      - redis
+      - tarantool
+      - zabbix-agent
+      - grafana
+      - z-social-network-counter-hw11
+
+  z-social-network-counter-hw11:
+    container_name: z-social-network-counter-hw11
+    image: zsalamandra/z-social-network-counter-hw11
+    build:
+      context: ../counter-service
+      dockerfile: Dockerfile
+      args:
+        CONFIG_FILE: application.yaml
+    ports:
+      - "8087:8087"
+    restart: unless-stopped
+    networks:
+      - social-network
+    environment:
+      - JAVA_OPTS="-Xmx1024m -Xms512m"
+      - TARANTOOL_HOST=z-social-network-hw11-tarantool
+      - TARANTOOL_PORT=3301
+      - TARANTOOL_USERNAME=admin
+      - TARANTOOL_PASSWORD=pass
+      - INITIALIZER_NODE=app
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - SPRING_DATA_REDIS_HOST=redis
+
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: z-social-network-prometheus
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - social-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: z-social-network-grafana
+    ports:
+      - "3000:3000"
+    networks:
+      - social-network
+    depends_on:
+      - prometheus
+
+  zabbix-db:
+    image: postgres:14-alpine
+    container_name: z-social-network-zabbix-db
+    environment:
+      POSTGRES_USER: zabbix
+      POSTGRES_PASSWORD: zabbix
+      POSTGRES_DB: zabbix
+    networks:
+      - social-network
+
+  zabbix-server:
+    image: zabbix/zabbix-server-pgsql:alpine-latest
+    container_name: z-social-network-zabbix-server
+    environment:
+      - DB_SERVER_HOST=zabbix-db
+      - POSTGRES_USER=zabbix
+      - POSTGRES_PASSWORD=zabbix
+      - POSTGRES_DB=zabbix
+      - ZBX_LISTENIP=0.0.0.0
+    depends_on:
+      - zabbix-db
+    ports:
+      - "10051:10051"
+    volumes:
+      - ./zabbix/zabbix_server.conf:/etc/zabbix/zabbix_server.conf
+    networks:
+      - social-network
+
+  zabbix-frontend:
+    image: zabbix/zabbix-web-nginx-pgsql:alpine-latest
+    container_name: z-social-network-zabbix-frontend
+    environment:
+      - DB_SERVER_HOST=zabbix-db
+      - POSTGRES_USER=zabbix
+      - POSTGRES_PASSWORD=zabbix
+      - POSTGRES_DB=zabbix
+      - ZBX_SERVER_HOST=z-social-network-zabbix-server
+      - PHP_TZ=Europe/Moscow
+    depends_on:
+      - zabbix-server
+      - zabbix-db
+    ports:
+      - "8082:8080"
+    networks:
+      - social-network
+
+  zabbix-agent:
+    image: zabbix/zabbix-agent:alpine-latest
+    container_name: z-social-network-zabbix-agent
+    environment:
+      - ZBX_SERVER_HOST=zabbix-server
+      - ZBX_HOSTNAME=z-social-network-agent
+    networks:
+      - social-network
+    depends_on:
+      - zabbix-server
+
+networks:
+  social-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:
+  tarantool-data:
